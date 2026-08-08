@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420">
+  <rect width="1200" height="420" fill="#061A1F"/>
+  <text x="40" y="56" font-family="system-ui, sans-serif" font-size="26" font-weight="900" fill="#9FE6EA">スミノエ・ログ</text>
+  <text x="40" y="86" font-family="system-ui, sans-serif" font-size="15" fill="#7FA8AE">dark テーマ / 画面下部の波しぶきと艇</text>
+  <g transform="translate(0,230)">
+    <g transform="scale(1,1)"><path
+          d="M0 120 C 100 100, 200 140, 300 122 S 500 96, 600 120 S 800 144, 900 120 S 1100 98, 1200 120 L1200 190 L0 190 Z"
+          fill="#0D2F37"
+        /></g>
+    <g transform="scale(1,1)"><path
+          d="M0 145 C 120 128, 240 162, 360 146 S 600 122, 720 146 S 960 168, 1080 146 S 1160 136, 1200 145 L1200 190 L0 190 Z"
+          fill="#124049"
+        /></g>
+    <g transform="translate(880,130) scale(1.7)">
+          {/* 後方に上がるしぶき（大きい飛沫から小さい飛沫へ） */}
+          <g fill="#9FE6EA" opacity="0.9">
+            <path d="M96 40 C 104 26, 112 22, 120 24 C 112 30, 108 36, 106 42 Z" opacity="0.75" />
+            <path d="M92 42 C 98 32, 105 29, 111 31 C 104 35, 100 39, 98 44 Z" opacity="0.6" />
+            <circle cx="122" cy="20" r="2.6" opacity="0.7" />
+            <circle cx="128" cy="26" r="1.8" opacity="0.5" />
+            <circle cx="116" cy="14" r="1.6" opacity="0.45" />
+            <circle cx="108" cy="18" r="1.2" opacity="0.4" />
+          </g>
+
+          {/* 船体（横から見た競艇のボート。先端が反り上がる） */}
+          <path
+            d="M8 44 C 20 40, 44 38, 70 38 L 100 38 C 104 38, 106 40, 104 43 L 100 47 C 96 49, 88 50, 74 50 L 26 50 C 16 50, 10 48, 8 44 Z"
+            fill="#02090B"
+          />
+          {/* 前方の反り */}
+          <path d="M4 42 C 6 38, 12 36, 18 37 L 12 44 Z" fill="#02090B" />
+
+          {/* 選手（前傾姿勢。ヘルメットと背中） */}
+          <path
+            d="M58 38 C 58 30, 63 25, 70 25 C 76 25, 80 29, 80 34 L 80 38 Z"
+            fill="#02090B"
+          />
+          <circle cx="72" cy="22" r="5.4" fill="#02090B" />
+
+          {/* 後方のエンジン（カウル） */}
+          <path d="M96 38 L 106 38 C 108 38, 108 33, 104 32 L 96 32 Z" fill="#02090B" />
+
+          {/* 船体の下、水を切る白い航跡 */}
+          <path
+            d="M10 50 C 30 53, 60 54, 96 52 L 96 55 C 60 57, 28 56, 10 53 Z"
+            fill="#9FE6EA"
+            opacity="0.55"
+          />
+        </g>
+    <g transform="scale(1,1)"><path
+          d="M0 168 C 150 152, 300 184, 450 168 S 750 146, 900 168 S 1140 186, 1200 170 L1200 190 L0 190 Z"
+          fill="#17525D"
+        /></g>
+  </g>
+</svg>

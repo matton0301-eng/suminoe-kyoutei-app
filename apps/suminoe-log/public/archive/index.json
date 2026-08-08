@@ -1,0 +1,15 @@
+{
+ "schemaVersion": 1,
+ "days": [
+  {
+   "date": "2026-08-08",
+   "hasCard": true,
+   "hasResults": true
+  },
+  {
+   "date": "2026-08-07",
+   "hasCard": true,
+   "hasResults": true
+  }
+ ]
+}

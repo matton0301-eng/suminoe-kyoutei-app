@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" width="1200" height="460">
+  <rect width="1200" height="460" fill="#061A1F"/>
+  <text x="40" y="52" font-family="system-ui, sans-serif" font-size="24" font-weight="900" fill="#9FE6EA">ターン中の艇と水しぶき</text>
+  <text x="40" y="80" font-family="system-ui, sans-serif" font-size="14" fill="#7FA8AE">dark テーマ / 画面下部に固定表示</text>
+  <g transform="translate(0,160)">
+    <g><path
+          d="M0 196 C 100 174, 200 216, 300 198 S 500 170, 600 196 S 800 222, 900 196 S 1100 172, 1200 196 L1200 300 L0 300 Z"
+          fill="#0D2F37"
+        /></g>
+    <g><path
+          d="M0 232 C 120 212, 240 250, 360 234 S 600 206, 720 234 S 960 258, 1080 234 S 1160 222, 1200 232 L1200 300 L0 300 Z"
+          fill="#124049"
+        /></g>
+    <g transform="translate(700,28) scale(1.5)">
+          {/* --- 外側へ噴き上がるしぶき（大きな塊から細かい粒へ） --- */}
+          <g fill="#9FE6EA">
+            {/* 主となる噴き上がり。艇の外側から扇状に */}
+            <path
+              d="M150 74 C 168 40, 188 18, 214 8 C 200 30, 190 50, 186 72 C 176 62, 162 64, 150 74 Z"
+              opacity="0.92"
+            />
+            <path
+              d="M142 78 C 156 48, 172 28, 194 16 C 182 36, 174 54, 170 74 C 160 68, 150 70, 142 78 Z"
+              opacity="0.7"
+            />
+            <path
+              d="M134 82 C 144 58, 156 42, 172 32 C 163 48, 157 62, 154 78 Z"
+              opacity="0.5"
+            />
+            {/* 弧を描いて散る粒 */}
+            <circle cx="216" cy="6" r="4.2" opacity="0.85" />
+            <circle cx="206" cy="20" r="3.2" opacity="0.7" />
+            <circle cx="222" cy="22" r="2.6" opacity="0.6" />
+            <circle cx="196" cy="6" r="2.4" opacity="0.55" />
+            <circle cx="212" cy="36" r="2.2" opacity="0.5" />
+            <circle cx="184" cy="4" r="1.8" opacity="0.45" />
+            <circle cx="226" cy="42" r="1.6" opacity="0.4" />
+            <circle cx="198" cy="46" r="1.4" opacity="0.4" />
+            <circle cx="172" cy="12" r="1.4" opacity="0.35" />
+            {/* 手前側にも少し飛ばす（立体感） */}
+            <circle cx="120" cy="66" r="2.2" opacity="0.55" />
+            <circle cx="108" cy="74" r="1.6" opacity="0.4" />
+          </g>
+
+          {/* --- 艇（ターン姿勢。内側に倒れ込んでいる） --- */}
+          <g transform="rotate(-16 96 84)">
+            {/* 船体。ターン内側が持ち上がるので下面が見える */}
+            <path
+              d="M24 82 C 40 76, 70 73, 100 73 L 138 73 C 143 73, 145 76, 142 80 L 136 87 C 130 90, 118 92, 100 92 L 46 92 C 33 92, 26 88, 24 82 Z"
+              fill="#02090B"
+            />
+            {/* 前方の反り上がり */}
+            <path d="M18 79 C 21 73, 29 70, 37 72 L 29 82 Z" fill="#02090B" />
+            {/* 選手。ターンでは内側に大きく身体を倒す */}
+            <g transform="rotate(-12 96 72)">
+              <path
+                d="M84 73 C 84 62, 90 55, 99 55 C 107 55, 112 60, 112 67 L 112 73 Z"
+                fill="#02090B"
+              />
+              <circle cx="102" cy="51" r="6.6" fill="#02090B" />
+            </g>
+            {/* 後方のエンジン（カウル） */}
+            <path d="M132 73 L 145 73 C 148 73, 148 66, 143 65 L 132 65 Z" fill="#02090B" />
+          </g>
+
+          {/* --- 水面を削った跡（ターンの弧） --- */}
+          <path
+            d="M18 100 C 54 106, 96 106, 140 98 C 150 96, 156 92, 160 86"
+            stroke="#9FE6EA"
+            strokeWidth="3.4"
+            strokeLinecap="round"
+            opacity="0.62"
+            fill="none"
+          />
+          <path
+            d="M30 106 C 66 111, 104 110, 138 104"
+            stroke="#9FE6EA"
+            strokeWidth="2"
+            strokeLinecap="round"
+            opacity="0.38"
+            fill="none"
+          /></g>
+    <g><path
+          d="M0 268 C 150 250, 300 286, 450 268 S 750 242, 900 268 S 1140 288, 1200 270 L1200 300 L0 300 Z"
+          fill="#17525D"
+        /></g>
+  </g>
+</svg>

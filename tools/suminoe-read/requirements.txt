@@ -1,0 +1,4 @@
+# 実行に必要な依存はこれ1つだけ。
+# LZH解凍は Windows 11 標準の bsdtar (C:\Windows\System32\tar.exe) を使うため追加依存は不要。
+# 詳細は docs/03-bangumihyou-format.md §3。
+requests>=2.32

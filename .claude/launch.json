@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "suminoe-log-static",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "serve@14", "apps/suminoe-log/out", "-l", "4321"],
+      "port": 4321
+    },
+    {
+      "name": "suminoe-log-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "apps/suminoe-log", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}

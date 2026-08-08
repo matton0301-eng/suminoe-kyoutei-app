@@ -1,0 +1,517 @@
+'use client';
+
+/**
+ * スミノエ・ログ 単一ページ。
+ *
+ * 状態は useState / useReducer のみ。永続化は localStorage のみ。
+ * 保存はデバウンスせず即時、フォーム入力のたびに下書きを退避する
+ * （現地での取りこぼしを防ぐため）。
+ *
+ * **特定の1日の専用アプリではない。** 扱う開催日は出走表の日付で決まり、
+ * 記録はその日付ごとに保存する（`lib/raceDate.ts`）。
+ */
+
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+
+import { BetsTab } from '@/components/BetsTab';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { DayPicker } from '@/components/DayPicker';
+import { ExportTab } from '@/components/ExportTab';
+import { LogList } from '@/components/LogList';
+import { RecordTab } from '@/components/RecordTab';
+import { StatsTab } from '@/components/StatsTab';
+import { TallyTab } from '@/components/TallyTab';
+import { WaveScene } from '@/components/WaveScene';
+import { TabBar, type TabKey } from '@/components/TabBar';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { Toast } from '@/components/Toast';
+import { aggregate } from '@/lib/aggregate';
+import { fetchArchiveDay, fetchArchiveIndex, mergeDayEntries, type DayEntry } from '@/lib/archive';
+import { createId, formReducer, nextRaceNo, toRaceLog } from '@/lib/formReducer';
+import { toCsv, toPlainText } from '@/lib/exporters';
+import { fetchBundledCard, parseRaceCard, type RaceCard } from '@/lib/raceCard';
+import { formatDateLabel, todayIso } from '@/lib/raceDate';
+import { fetchResults, type ResultDay } from '@/lib/results';
+import { formatMinutesLeft, isUrgent, minutesUntil, resolveSchedule } from '@/lib/schedule';
+import { tallyDay } from '@/lib/tally';
+import {
+  clearAll,
+  clearDraft,
+  clearRaceCard,
+  countLogsByDate,
+  isDraftMeaningful,
+  loadDraft,
+  loadLogs,
+  loadRaceCardRaw,
+  saveDraft,
+  saveLogs,
+  saveRaceCardRaw,
+} from '@/lib/storage';
+import { EMPTY_FORM, type Boat, type RaceLog } from '@/lib/types';
+
+type PendingConfirm = 'saveWithoutResult' | 'clearAll' | null;
+
+export default function Page() {
+  const [tab, setTab] = useState<TabKey>('record');
+  const [logs, setLogs] = useState<RaceLog[]>([]);
+  const [form, dispatch] = useReducer(formReducer, EMPTY_FORM);
+  const [toast, setToast] = useState<string | null>(null);
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [raceCard, setRaceCard] = useState<RaceCard | null>(null);
+  const [results, setResults] = useState<ResultDay | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  /** 締切までの残り時間を出すための現在時刻。1分ごとに進める */
+  const [now, setNow] = useState<Date | null>(null);
+  /** 起動時の自動選択を一度だけ行うためのフラグ */
+  const [autoPicked, setAutoPicked] = useState(false);
+  /**
+   * アプリがいま扱っている開催日（"2026-08-09"）。
+   * 出走表があればその日付、なければ端末の今日。記録はこの日付ごとに保存する。
+   */
+  const [raceDate, setRaceDate] = useState<string>(() => todayIso());
+  /** 閲覧中の過去日。通常運用(今日)なら null */
+  const [viewDate, setViewDate] = useState<string | null>(null);
+  /** 過去日表示用のデータ一式。当日の state には触れない */
+  const [archiveView, setArchiveView] = useState<{
+    card: RaceCard | null;
+    results: ResultDay | null;
+    logs: RaceLog[];
+  } | null>(null);
+  const [dayPickerOpen, setDayPickerOpen] = useState(false);
+  const [dayEntries, setDayEntries] = useState<DayEntry[]>([]);
+  /** 過去日のアーカイブが取得できなかったときの案内 */
+  const [archiveNotice, setArchiveNotice] = useState<string | null>(null);
+
+  /**
+   * 起動時: 出走表 → その日付 → 記録・下書き の順に復元する。
+   *
+   * localStorage はサーバー側では読めないため、初期 state に埋め込むと
+   * hydration が食い違う。読み取りは effect で行うのが正しい。
+   * ここは起動時の1回だけで、以降の再レンダーは発生しない。
+   */
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    // 先に出走表を読む。その日付が「アプリが扱う日」になる
+    const storedCard = loadRaceCardRaw();
+    const storedParsed = storedCard ? parseRaceCard(storedCard).card : null;
+    const initialDate = storedParsed?.date || todayIso();
+    if (storedParsed) setRaceCard(storedParsed);
+    setRaceDate(initialDate);
+
+    const { logs: storedLogs, error } = loadLogs(initialDate);
+    setLogs(storedLogs);
+    if (error) setStorageWarning(error);
+
+    const draft = loadDraft(initialDate);
+    if (draft && isDraftMeaningful(draft)) {
+      dispatch({ type: 'restore', form: draft });
+      setToast('入力途中の内容を復元しました');
+    } else if (storedLogs.length > 0) {
+      const maxRaceNo = Math.max(...storedLogs.map((log) => log.raceNo));
+      dispatch({ type: 'reset', raceNo: nextRaceNo(maxRaceNo) });
+    }
+    setHydrated(true);
+
+    /**
+     * アプリに同梱された出走表を読む（貼り付け不要にするため）。
+     * 当日朝に取得した分がデプロイされていれば、アプリを開くだけで反映される。
+     */
+    void fetchBundledCard().then((bundled) => {
+      if (!bundled) return;
+      if (storedParsed && storedParsed.date === bundled.date) return;
+      setRaceCard(bundled);
+      saveRaceCardRaw(JSON.stringify(bundled));
+
+      // 開催日が変わったら、その日の記録に切り替える（前日の記録は別キーに残る）
+      if (bundled.date !== initialDate) {
+        setRaceDate(bundled.date);
+        const switched = loadLogs(bundled.date);
+        setLogs(switched.logs);
+        const switchedDraft = loadDraft(bundled.date);
+        dispatch(
+          switchedDraft && isDraftMeaningful(switchedDraft)
+            ? { type: 'restore', form: switchedDraft }
+            : {
+                type: 'reset',
+                raceNo:
+                  switched.logs.length > 0
+                    ? nextRaceNo(Math.max(...switched.logs.map((log) => log.raceNo)))
+                    : 1,
+              },
+        );
+      }
+      setToast(`${formatDateLabel(bundled.date)} の出走表を読み込みました`);
+    });
+
+    /**
+     * 競走成績を読む。全レースが終わってから確定するため、レース中は存在しない。
+     * 取れなければ何もしない（買い目タブに結果セクションが出ないだけ）。
+     */
+    void fetchResults().then((fetched) => {
+      if (fetched) setResults(fetched);
+    });
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  /**
+   * 締切までの残り時間を進める。1分ごとで足りる。
+   *
+   * 現在時刻は初期 state に入れられない（サーバー側の描画と食い違う）。
+   * 時計はまさに「外部システム」なので、effect で購読するのが正しい形。
+   */
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 時計の購読。初期値は描画前に決められない
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // フォームが変わるたびに下書きを退避（デバウンスしない）
+  useEffect(() => {
+    if (!hydrated) return;
+    saveDraft(raceDate, form);
+  }, [form, hydrated, raceDate]);
+
+  const persist = useCallback(
+    (next: RaceLog[]) => {
+      setLogs(next);
+      if (!saveLogs(raceDate, next)) {
+        setStorageWarning('記録を保存できませんでした。画面を閉じると消える可能性があります。');
+      }
+    },
+    [raceDate],
+  );
+
+  const commit = useCallback(() => {
+    const editingId = form.editingId;
+    if (editingId !== null) {
+      const next = logs.map((log) =>
+        log.id === editingId ? { ...toRaceLog(form, editingId), savedAt: log.savedAt } : log,
+      );
+      persist(next);
+      setToast(`${form.raceNo}R を修正しました`);
+      dispatch({ type: 'reset', raceNo: nextRaceNo(form.raceNo) });
+    } else {
+      const next = [...logs, toRaceLog(form, createId())];
+      persist(next);
+      setToast(`${form.raceNo}R を記録しました`);
+      dispatch({ type: 'reset', raceNo: nextRaceNo(form.raceNo) });
+    }
+    clearDraft(raceDate);
+  }, [form, logs, persist, raceDate]);
+
+  const handleSave = useCallback(() => {
+    // 未入力でも保存できてよい。ただし結果1着が空のときだけ確認する。
+    if (form.resultFirst === null) {
+      setPendingConfirm('saveWithoutResult');
+      return;
+    }
+    commit();
+  }, [form.resultFirst, commit]);
+
+  const lastLog = useMemo(() => (logs.length > 0 ? logs[logs.length - 1] : null), [logs]);
+
+  const handleEditLast = useCallback(() => {
+    if (lastLog) dispatch({ type: 'loadForEdit', log: lastLog });
+  }, [lastLog]);
+
+  const handleCancelEdit = useCallback(() => {
+    const base = logs.length > 0 ? Math.max(...logs.map((log) => log.raceNo)) : 0;
+    dispatch({ type: 'reset', raceNo: nextRaceNo(base) });
+    clearDraft(raceDate);
+  }, [logs, raceDate]);
+
+  const handleClearAll = useCallback(() => {
+    clearAll(raceDate);
+    setLogs([]);
+    dispatch({ type: 'reset', raceNo: 1 });
+    setPendingConfirm(null);
+    setToast('全記録を消しました');
+    setTab('record');
+  }, [raceDate]);
+
+  const handleImportCard = useCallback((raw: string) => {
+    const { card, error } = parseRaceCard(raw);
+    if (error !== null || card === null) {
+      setImportError(error ?? '取り込めませんでした。');
+      return;
+    }
+    setRaceCard(card);
+    setRaceDate(card.date || todayIso());
+    setImportError(null);
+    if (!saveRaceCardRaw(raw)) {
+      setStorageWarning('出走表データを保存できませんでした。画面を閉じると消えます。');
+    }
+    setToast(`${formatDateLabel(card.date)} の出走表を取り込みました（${card.races.length}レース）`);
+  }, []);
+
+  const handleClearCard = useCallback(() => {
+    clearRaceCard();
+    setRaceCard(null);
+    setImportError(null);
+    setToast('出走表データを消しました');
+  }, []);
+
+  /** ヘッダーの日付タップ。先にモーダルを開いてから一覧を読む(体感を軽くする) */
+  const openDayPicker = useCallback(async () => {
+    setDayPickerOpen(true);
+    const index = await fetchArchiveIndex();
+    setDayEntries(mergeDayEntries(index, countLogsByDate()));
+  }, []);
+
+  /** 日付リストで日を選ぶ。null は「今日に戻る」 */
+  const handleSelectDay = useCallback(
+    async (date: string | null) => {
+      setDayPickerOpen(false);
+      if (date === null || date === raceDate) {
+        setViewDate(null);
+        setArchiveView(null);
+        setArchiveNotice(null);
+        return;
+      }
+      const stored = loadLogs(date);
+      const { card, results } = await fetchArchiveDay(date);
+      setViewDate(date);
+      setArchiveView({ card, results, logs: stored.logs });
+      setArchiveNotice(
+        card === null
+          ? 'この日の出走表・結果は取得できませんでした。オンラインで開くと見られます。'
+          : null,
+      );
+    },
+    [raceDate],
+  );
+
+  /** 過去日の閲覧中か。表示用のデータ源だけが切り替わり、当日の state はそのまま */
+  const viewing = viewDate !== null;
+  const activeDate = viewDate ?? raceDate;
+  const activeLogs = useMemo(
+    () => (viewing ? (archiveView?.logs ?? []) : logs),
+    [viewing, archiveView, logs],
+  );
+  const activeCard = viewing ? (archiveView?.card ?? null) : raceCard;
+  const activeResults = viewing ? (archiveView?.results ?? null) : results;
+
+  const stats = useMemo(() => aggregate(activeLogs), [activeLogs]);
+  const exportText = useMemo(() => toPlainText(activeLogs, activeDate), [activeLogs, activeDate]);
+  const exportCsv = useMemo(() => toCsv(activeLogs), [activeLogs]);
+
+  /** 締切時刻から「いま見るべきレース」を割り出す */
+  const schedule = useMemo(
+    () => (raceCard && now ? resolveSchedule(raceCard.races, now) : null),
+    [raceCard, now],
+  );
+
+  /**
+   * 起動時に一度だけ、締切が近いレースを選ぶ。
+   * 記録が既にある場合（続きから入れている場合）は、その続きを尊重して何もしない。
+   *
+   * 締切は出走表の取得後に分かるため「起動直後」では決められない。
+   * effect で setState すると警告になるので、レンダー中に一度だけ同期する。
+   */
+  if (!autoPicked && hydrated && schedule?.currentRaceNo) {
+    setAutoPicked(true);
+    if (logs.length === 0 && form.editingId === null && schedule.currentRaceNo !== form.raceNo) {
+      dispatch({ type: 'stepRaceNo', delta: schedule.currentRaceNo - form.raceNo });
+    }
+  }
+
+  /** 記録タブに出すレース情報（レース名・締切・出走メンバー） */
+  const currentRace = useMemo(
+    () => raceCard?.races.find((race) => race.raceNo === form.raceNo) ?? null,
+    [raceCard, form.raceNo],
+  );
+
+  /** 収支タブ用の通算集計。結果が出ていなければ null */
+  const tally = useMemo(
+    () => (activeCard && activeResults ? tallyDay(activeCard, activeResults) : null),
+    [activeCard, activeResults],
+  );
+
+  /**
+   * 記録タブで見ているレースの締切までの残り分。
+   *
+   * 「次に締まるレース」ではなく「いま見ているレース」の残り時間を出す。
+   * 記録の続きから入れている場合、見ているレースと次に締まるレースは別になるため。
+   */
+  const selectedMinutesLeft = useMemo(
+    () => (currentRace && now ? minutesUntil(currentRace.deadline, now) : null),
+    [currentRace, now],
+  );
+
+  /**
+   * 買い目タブで見ているレースの「展示で速そうな艇」。
+   * すでに記録済みならその値、まだならフォームの入力中の値を使う。
+   */
+  const tenjiFastFor = useCallback(
+    (raceNo: number): Boat | null => {
+      // 過去日の閲覧中はその日の記録だけから引く(入力中のフォームは当日のもの)
+      const source = viewing ? (archiveView?.logs ?? []) : logs;
+      const saved = [...source].reverse().find((log) => log.raceNo === raceNo);
+      if (saved) return saved.tenjiFast;
+      if (viewing) return null;
+      return form.raceNo === raceNo ? form.tenjiFast : null;
+    },
+    [viewing, archiveView, logs, form.raceNo, form.tenjiFast],
+  );
+
+  /** 買い目の補正に使う当日実測のコース別1着率 */
+  const actualCourseRates = useMemo(() => {
+    const rates: Partial<Record<Boat, number | null>> = {};
+    for (const course of stats.courses) {
+      rates[course.course] = course.rate;
+    }
+    return rates;
+  }, [stats.courses]);
+
+  /** 出走表の日付が端末の今日と違えば、いつのデータを見ているのか分かるようにする */
+  const viewingPastDay = hydrated && raceDate !== todayIso();
+
+  return (
+    <>
+      {/*
+        ヘッダーに水面のシーンを同化させている。下部（親指の操作領域）に
+        装飾を置くと、コンテンツを断ち切るうえに一番使う場所を奪う。
+        `pb-[3.75rem]` が水面の見える高さ。**幾何は globals.css にある。**
+      */}
+      <header className="sticky top-0 z-10 overflow-hidden border-b border-line bg-bg-deep/95 pb-[3.75rem] backdrop-blur">
+        <WaveScene />
+        <div className="relative mx-auto flex max-w-lg items-center justify-between gap-2 px-4 py-2">
+          <h1 className="text-lg font-black text-text-main">スミノエ・ログ</h1>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openDayPicker}
+              className="tnum min-h-11 rounded-lg px-2 text-sm text-text-mute underline decoration-dotted underline-offset-4"
+              aria-label="日付を選ぶ"
+            >
+              {formatDateLabel(activeDate)}
+            </button>
+            <ThemeToggle />
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-lg flex-1 px-1.5 py-3">
+        {storageWarning ? (
+          <p
+            role="alert"
+            className="mb-3 rounded-lg border border-accent bg-bg-panel p-3 text-sm text-text-main"
+          >
+            {storageWarning}
+          </p>
+        ) : null}
+
+        {viewing ? (
+          <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-accent bg-bg-panel px-3 py-2">
+            <p className="text-xs text-text-main">
+              閲覧専用 — <span className="tnum">{formatDateLabel(activeDate)}</span> のデータを表示中
+            </p>
+            <button
+              type="button"
+              onClick={() => handleSelectDay(null)}
+              className="on-accent min-h-9 shrink-0 rounded-lg bg-accent px-3 text-xs font-bold"
+            >
+              今日に戻る
+            </button>
+          </div>
+        ) : viewingPastDay ? (
+          <p className="mb-3 rounded-lg border border-line bg-bg-panel px-3 py-2 text-xs text-text-mute">
+            今日ではなく <span className="tnum text-text-main">{formatDateLabel(raceDate)}</span>{' '}
+            のデータを表示しています。新しい出走表が用意されると自動で切り替わります。
+          </p>
+        ) : null}
+        {viewing && archiveNotice ? (
+          <p className="mb-3 rounded-lg border border-line bg-bg-panel px-3 py-2 text-xs text-text-mute">
+            {archiveNotice}
+          </p>
+        ) : null}
+
+        {tab === 'record' ? (
+          viewing ? (
+            <LogList logs={activeLogs} />
+          ) : (
+            <RecordTab
+              form={form}
+              dispatch={dispatch}
+              lastLog={lastLog}
+              race={currentRace}
+              deadlineLabel={formatMinutesLeft(selectedMinutesLeft)}
+              deadlineUrgent={isUrgent(selectedMinutesLeft)}
+              onSave={handleSave}
+              onEditLast={handleEditLast}
+              onCancelEdit={handleCancelEdit}
+            />
+          )
+        ) : null}
+
+        {tab === 'bets' ? (
+          <BetsTab
+            card={activeCard}
+            actualCourseRates={actualCourseRates}
+            resultCount={stats.resultCount}
+            results={activeResults}
+            focusRaceNo={form.raceNo}
+            tenjiFastFor={tenjiFastFor}
+            onImport={handleImportCard}
+            onClearCard={handleClearCard}
+            importError={importError}
+            readOnly={viewing}
+          />
+        ) : null}
+
+        {tab === 'stats' ? <StatsTab stats={stats} /> : null}
+
+        {tab === 'tally' ? <TallyTab tally={tally} hasCard={activeCard !== null} /> : null}
+
+        {tab === 'export' ? (
+          <ExportTab
+            text={exportText}
+            csv={exportCsv}
+            hasLogs={activeLogs.length > 0}
+            onRequestClearAll={() => setPendingConfirm('clearAll')}
+            onToast={setToast}
+            readOnly={viewing}
+          />
+        ) : null}
+      </main>
+
+      <TabBar active={tab} onChange={setTab} />
+
+      <DayPicker
+        open={dayPickerOpen}
+        entries={dayEntries}
+        currentDate={raceDate}
+        viewDate={viewDate}
+        onSelect={handleSelectDay}
+        onClose={() => setDayPickerOpen(false)}
+      />
+
+      <Toast message={toast} onDismiss={() => setToast(null)} />
+
+      <ConfirmDialog
+        open={pendingConfirm === 'saveWithoutResult'}
+        title="結果の1着が未入力です"
+        body="このまま記録しますか？（あとから修正できます）"
+        confirmLabel="このまま記録する"
+        onConfirm={() => {
+          setPendingConfirm(null);
+          commit();
+        }}
+        onCancel={() => setPendingConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingConfirm === 'clearAll'}
+        title={`${formatDateLabel(raceDate)} の記録を消しますか？`}
+        body="この操作は取り消せません。先に書き出してコピーしておくことをおすすめします。"
+        confirmLabel="消す"
+        destructive
+        onConfirm={handleClearAll}
+        onCancel={() => setPendingConfirm(null)}
+      />
+    </>
+  );
+}

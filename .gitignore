@@ -1,0 +1,26 @@
+# Node / Next.js
+node_modules/
+.next/
+out/
+.vercel/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# スミノエ・リード実行時生成物（サンプル出力は明示的に add する）
+tools/suminoe-read/cache/
+tools/suminoe-read/logs/
+tools/suminoe-read/task-*.xml
+
+# 環境変数・秘密情報
+.env
+.env.*
+
+# OS / エディタ
+Thumbs.db
+.DS_Store
+*.log
