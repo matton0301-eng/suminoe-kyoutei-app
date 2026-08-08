@@ -5,30 +5,33 @@
  *
  * **控除率は約25%あるので、続ければ回収率は75%前後に収束する。**
  * ここで100%を超えていても1日ぶんのばらつきなので、母数を必ず併記する。
+ *
+ * 「通算」は開催日をまたいだ集計（{@link TotalTallyView}）。
+ * アーカイブを全日分読むので、**押されて初めて**取得する（起動時には読まない）。
  */
 
+import { useState } from 'react';
+
+import { Balance, Disclaimer, Rate } from '@/components/TallyParts';
+import { TotalTallyView } from '@/components/TotalTallyView';
+import type { MultiTally } from '@/lib/multiTally';
 import { formatYen } from '@/lib/review';
 import type { DayTally } from '@/lib/tally';
 import { BOAT_COLORS, type Boat } from '@/lib/types';
+
+type Mode = 'day' | 'total';
 
 interface TallyTabProps {
   tally: DayTally | null;
   /** 出走表があるか（無ければ取り込みを促す） */
   hasCard: boolean;
-}
-
-function Rate({ value, digits = 0 }: { value: number | null; digits?: number }) {
-  return <span className="tnum">{value === null ? '—' : `${value.toFixed(digits)}%`}</span>;
-}
-
-function Balance({ value }: { value: number }) {
-  const positive = value >= 0;
-  return (
-    <span className={['tnum font-bold', positive ? 'text-accent' : 'text-text-mute'].join(' ')}>
-      {positive ? '+' : '−'}
-      {formatYen(Math.abs(value))}
-    </span>
-  );
+  /** 通算データ。まだ読み込んでいなければ null */
+  total: MultiTally | null;
+  totalLoading: boolean;
+  /** 通算の読み込みに失敗したときの案内。無ければ null */
+  totalError: string | null;
+  /** 「通算」を初めて開いたときに呼ばれる */
+  onRequestTotal: () => void;
 }
 
 function OrderMini({ order }: { order: Boat[] }) {
@@ -50,23 +53,67 @@ function OrderMini({ order }: { order: Boat[] }) {
   );
 }
 
-export function TallyTab({ tally, hasCard }: TallyTabProps) {
+export function TallyTab({
+  tally,
+  hasCard,
+  total,
+  totalLoading,
+  totalError,
+  onRequestTotal,
+}: TallyTabProps) {
+  const [mode, setMode] = useState<Mode>('day');
+
+  const handleMode = (next: Mode) => {
+    setMode(next);
+    // 通算はアーカイブ全日分の取得を伴うので、初回に押されたときだけ読む
+    if (next === 'total' && total === null && !totalLoading) onRequestTotal();
+  };
+
+  return (
+    <div className="space-y-3 pb-20">
+      <div className="flex gap-2">
+        {(['day', 'total'] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => handleMode(value)}
+            aria-pressed={mode === value}
+            className={[
+              'min-h-11 flex-1 rounded-lg text-sm font-bold',
+              mode === value
+                ? 'on-accent bg-accent'
+                : 'border border-line bg-bg-raised text-text-main',
+            ].join(' ')}
+          >
+            {value === 'day' ? 'この日' : '通算'}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'day' ? (
+        <DayView tally={tally} hasCard={hasCard} />
+      ) : (
+        <TotalTallyView total={total} loading={totalLoading} error={totalError} />
+      )}
+    </div>
+  );
+}
+
+function DayView({ tally, hasCard }: { tally: DayTally | null; hasCard: boolean }) {
   if (!hasCard) {
     return (
-      <div className="space-y-3 pb-20">
-        <section className="rounded-xl border border-line bg-bg-panel p-4">
-          <p className="text-sm text-text-main">出走表がまだありません。</p>
-          <p className="mt-1 text-xs text-text-mute">
-            買い目タブで出走表を取り込むと、レース後にここで収支が出ます。
-          </p>
-        </section>
-      </div>
+      <section className="rounded-xl border border-line bg-bg-panel p-4">
+        <p className="text-sm text-text-main">出走表がまだありません。</p>
+        <p className="mt-1 text-xs text-text-mute">
+          買い目タブで出走表を取り込むと、レース後にここで収支が出ます。
+        </p>
+      </section>
     );
   }
 
   if (!tally) {
     return (
-      <div className="space-y-3 pb-20">
+      <>
         <section className="rounded-xl border border-line bg-bg-panel p-4">
           <h2 className="text-base font-bold text-text-main">まだ結果が出ていません</h2>
           <p className="mt-1 text-sm text-text-mute">
@@ -75,18 +122,16 @@ export function TallyTab({ tally, hasCard }: TallyTabProps) {
           </p>
         </section>
         <Disclaimer />
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="space-y-3 pb-20">
+    <>
       {/* 全体 */}
       <section className="rounded-xl border border-accent bg-bg-panel p-4">
         <div className="rule-start">
-          <h2 className="text-[13px] font-bold tracking-wide text-text-main">
-            {tally.date} の収支
-          </h2>
+          <h2 className="text-[13px] font-bold tracking-wide text-text-main">{tally.date} の収支</h2>
           <p className="mt-0.5 text-[11px] text-text-mute">
             提示した8賭式すべてを1点{formatYen(100)}で買った場合
           </p>
@@ -275,20 +320,6 @@ export function TallyTab({ tally, hasCard }: TallyTabProps) {
       </section>
 
       <Disclaimer />
-    </div>
-  );
-}
-
-function Disclaimer() {
-  return (
-    <section className="rounded-xl border border-line bg-bg-deep p-3">
-      <p className="text-[11px] leading-relaxed text-text-mute">
-        <strong className="text-text-main">舟券の控除率は約25%あります。</strong>
-        つまり長く買い続ければ回収率は75%前後に近づきます。ここで100%を超えていても、
-        1日ぶんのばらつきであって分析が優れている証拠ではありません。
-        逆に大きく負けていても、その日の運の範囲です。
-        数字を見て買い方を大きく変えないでください。
-      </p>
-    </section>
+    </>
   );
 }

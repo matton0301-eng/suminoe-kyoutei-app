@@ -27,6 +27,8 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Toast } from '@/components/Toast';
 import { aggregate } from '@/lib/aggregate';
 import { fetchArchiveDay, fetchArchiveIndex, mergeDayEntries, type DayEntry } from '@/lib/archive';
+import type { MultiTally } from '@/lib/multiTally';
+import { loadMultiTally } from '@/lib/totalLoader';
 import { createId, formReducer, nextRaceNo, toRaceLog } from '@/lib/formReducer';
 import { toCsv, toPlainText } from '@/lib/exporters';
 import { fetchBundledCard, parseRaceCard, type RaceCard } from '@/lib/raceCard';
@@ -83,6 +85,10 @@ export default function Page() {
   const [dayEntries, setDayEntries] = useState<DayEntry[]>([]);
   /** 過去日のアーカイブが取得できなかったときの案内 */
   const [archiveNotice, setArchiveNotice] = useState<string | null>(null);
+  /** 開催日をまたいだ通算集計。収支タブで「通算」が押されるまで読まない */
+  const [total, setTotal] = useState<MultiTally | null>(null);
+  const [totalLoading, setTotalLoading] = useState(false);
+  const [totalError, setTotalError] = useState<string | null>(null);
 
   /**
    * 起動時: 出走表 → その日付 → 記録・下書き の順に復元する。
@@ -252,6 +258,24 @@ export default function Page() {
     setRaceCard(null);
     setImportError(null);
     setToast('出走表データを消しました');
+  }, []);
+
+  /**
+   * 収支タブで「通算」が初めて押されたときにアーカイブ全日分を読む。
+   * 起動時に読まないのは、開催日が増えるほど取得件数も増えるため。
+   */
+  const handleRequestTotal = useCallback(async () => {
+    setTotalLoading(true);
+    setTotalError(null);
+    try {
+      const loaded = await loadMultiTally();
+      if (loaded === null) {
+        setTotalError('通算データを読み込めませんでした。オンラインで開くと見られます。');
+      }
+      setTotal(loaded);
+    } finally {
+      setTotalLoading(false);
+    }
   }, []);
 
   /** ヘッダーの日付タップ。先にモーダルを開いてから一覧を読む(体感を軽くする) */
@@ -464,7 +488,16 @@ export default function Page() {
 
         {tab === 'stats' ? <StatsTab stats={stats} /> : null}
 
-        {tab === 'tally' ? <TallyTab tally={tally} hasCard={activeCard !== null} /> : null}
+        {tab === 'tally' ? (
+          <TallyTab
+            tally={tally}
+            hasCard={activeCard !== null}
+            total={total}
+            totalLoading={totalLoading}
+            totalError={totalError}
+            onRequestTotal={handleRequestTotal}
+          />
+        ) : null}
 
         {tab === 'export' ? (
           <ExportTab
