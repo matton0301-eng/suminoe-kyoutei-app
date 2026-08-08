@@ -11,6 +11,15 @@
 
 import { useMemo, useState } from 'react';
 
+import {
+  fastestTenji,
+  findTenjiRace,
+  formatStartTiming,
+  formatTenjiWeather,
+  tenjiNotes,
+  type TenjiDay,
+  type TenjiRace,
+} from '@/lib/beforeInfo';
 import { ORDERED_KEYS, buildSuggestion, formatTicket, type BetPlan } from '@/lib/betting';
 import { COURSE_FIRST_RATE } from '@/lib/baseline';
 import type { CardRace, RaceCard } from '@/lib/raceCard';
@@ -27,6 +36,11 @@ interface BetsTabProps {
   resultCount: number;
   /** レース終了後に取り込まれる公式の結果。まだ出ていなければ null */
   results: ResultDay | null;
+  /**
+   * 公式の直前情報（展示タイム・スタート展示）。締切の10〜15分前に順次入る。
+   * **表示だけに使う。** 買い目の評価は記録タブの手入力（tenjiFastFor）で行う
+   */
+  tenji: TenjiDay | null;
   /** 記録タブで選んでいるレース番号。切り替わったらこちらも追従する */
   focusRaceNo: number;
   /** そのレースで「展示が速い」と見た艇を返す（現地の直前情報） */
@@ -43,6 +57,7 @@ export function BetsTab({
   actualCourseRates,
   resultCount,
   results,
+  tenji,
   focusRaceNo,
   tenjiFastFor,
   onImport,
@@ -87,6 +102,12 @@ export function BetsTab({
     if (!resultRace || !resultRace.ok) return null;
     return { resultRace, outcomes: reviewPlans(suggestion.plans, resultRace) };
   }, [race, suggestion, results, card]);
+
+  /** そのレースの直前情報。未公開・日付違いなら null（列ごと出さない） */
+  const tenjiRace = useMemo(
+    () => (race && card ? findTenjiRace(tenji, race.raceNo, card.date) : null),
+    [tenji, race, card],
+  );
 
   /** 結果が確定しているレース番号（選択ボタンに印を出す） */
   const finishedRaceNos = useMemo(() => {
@@ -271,7 +292,13 @@ export function BetsTab({
       </section>
 
       {/* 出走表 */}
-      {race.ok ? <RaceCardTable race={race} anchor={suggestion ? suggestion.anchor : null} /> : null}
+      {race.ok ? (
+        <RaceCardTable
+          race={race}
+          anchor={suggestion ? suggestion.anchor : null}
+          tenji={tenjiRace}
+        />
+      ) : null}
 
       {/* 補正の説明 */}
       {suggestion ? (
@@ -357,16 +384,39 @@ function VerdictBadge({ verdict }: { verdict: CardRace['verdict'] }) {
   return <span className={`rounded px-2 py-1 text-sm font-black ${style}`}>{verdict}</span>;
 }
 
-function RaceCardTable({ race, anchor }: { race: CardRace; anchor: Boat | null }) {
+/** 住之江の標準チルト。これ以外は意図して調整しているので、そのときだけ出す */
+const STANDARD_TILT = -0.5;
+
+function RaceCardTable({
+  race,
+  anchor,
+  tenji,
+}: {
+  race: CardRace;
+  anchor: Boat | null;
+  /** 直前情報。まだ公開されていなければ null で、そのときは展示の列を出さない */
+  tenji: TenjiRace | null;
+}) {
+  const tenjiByBoat = new Map((tenji?.entries ?? []).map((entry) => [entry.teiban, entry]));
+  const fastest = tenji ? fastestTenji(tenji.entries) : null;
+  const weatherLine = formatTenjiWeather(tenji?.weather ?? null);
+  const notes = tenjiNotes(tenji);
+
   return (
     <section className="rounded-xl border border-line bg-bg-panel p-3">
       <h2 className="text-sm font-bold text-text-mute">出走表</h2>
       <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-[22rem] text-xs">
+        {/*
+          min-width を置かない。幅360pxの実測で、7列（展示あり）でも 307px に収まり
+          折り返しも起きない。以前の min-w-[22rem] は、収まる内容をわざわざ 352px に
+          引き伸ばして横スクロールを作っていた（展示列を足す前から45pxはみ出していた）。
+        */}
+        <table className="w-full text-xs">
           <thead>
             <tr className="text-text-mute">
               <th className="w-8 pb-1 text-left font-normal">枠</th>
               <th className="pb-1 text-left font-normal">選手</th>
+              {tenji ? <th className="pb-1 text-right font-normal">展示</th> : null}
               <th className="pb-1 text-right font-normal">級別</th>
               <th className="pb-1 text-right font-normal">当地</th>
               <th className="pb-1 text-right font-normal">全国</th>
@@ -376,6 +426,8 @@ function RaceCardTable({ race, anchor }: { race: CardRace; anchor: Boat | null }
           <tbody>
             {race.boats.map((boat) => {
               const color = BOAT_COLORS[boat.teiban];
+              const info = tenjiByBoat.get(boat.teiban) ?? null;
+              const startTiming = formatStartTiming(info?.stTime ?? null);
               return (
                 <tr key={boat.teiban} className="border-t border-line">
                   <td className="py-1.5">
@@ -391,7 +443,37 @@ function RaceCardTable({ race, anchor }: { race: CardRace; anchor: Boat | null }
                     {anchor === boat.teiban ? (
                       <span className="ml-1 text-[10px] font-bold text-accent">軸</span>
                     ) : null}
+                    {info && info.partsChanged.length > 0 ? (
+                      <span className="ml-1 rounded bg-bg-raised px-1 text-[10px] text-text-mute ring-1 ring-line">
+                        部品
+                      </span>
+                    ) : null}
+                    {info && info.tilt !== null && info.tilt !== STANDARD_TILT ? (
+                      <span className="block text-[10px] text-accent">
+                        チルト {info.tilt.toFixed(1)}
+                      </span>
+                    ) : null}
                   </td>
+                  {tenji ? (
+                    <td className="tnum py-1.5 text-right">
+                      {info && info.tenjiTime !== null ? (
+                        <span
+                          className={
+                            info.tenjiTime === fastest
+                              ? 'font-black text-accent'
+                              : 'text-text-main'
+                          }
+                        >
+                          {info.tenjiTime.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-text-mute">—</span>
+                      )}
+                      {startTiming ? (
+                        <span className="block text-[10px] text-text-mute">ST {startTiming}</span>
+                      ) : null}
+                    </td>
+                  ) : null}
                   <td className="py-1.5 text-right text-text-main">{boat.kyubetsu}</td>
                   <td className="tnum py-1.5 text-right text-text-main">
                     {boat.noTouchiData ? '実績なし' : boat.touchiShoritsu.toFixed(2)}
@@ -408,6 +490,23 @@ function RaceCardTable({ race, anchor }: { race: CardRace; anchor: Boat | null }
           </tbody>
         </table>
       </div>
+      {tenji ? (
+        <>
+          {weatherLine ? (
+            <p className="mt-2 text-[10px] text-text-mute">水面 {weatherLine}</p>
+          ) : null}
+          {notes.map((note) => (
+            <p key={note} className="mt-1 text-[10px] text-text-mute">
+              {note}
+            </p>
+          ))}
+          <p className="mt-1 text-[10px] text-text-mute">
+            展示タイムとSTは公式の直前情報です。水面の条件で変わるため、
+            <strong className="text-text-main">速い＝勝つ ではありません</strong>。
+            買い目の評価には入れていません（記録タブの「展示が速そう」だけが評価に効きます）。
+          </p>
+        </>
+      ) : null}
       <p className="mt-2 text-[10px] text-text-mute">
         住之江は枠なり進入がほぼ確定（1枠→1コース100.0%）。枠番＝進入コースとして扱っています。
         基準の1コース1着率は {COURSE_FIRST_RATE[1]}%。

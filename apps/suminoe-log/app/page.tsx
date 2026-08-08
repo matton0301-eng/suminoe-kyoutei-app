@@ -33,6 +33,7 @@ import { createId, formReducer, nextRaceNo, toRaceLog } from '@/lib/formReducer'
 import { toCsv, toPlainText } from '@/lib/exporters';
 import { fetchBundledCard, parseRaceCard, type RaceCard } from '@/lib/raceCard';
 import { formatDateLabel, todayIso } from '@/lib/raceDate';
+import { fetchArchiveTenji, fetchBeforeInfo, type TenjiDay } from '@/lib/beforeInfo';
 import { fetchResults, type ResultDay } from '@/lib/results';
 import { formatMinutesLeft, isUrgent, minutesUntil, resolveSchedule } from '@/lib/schedule';
 import { tallyDay } from '@/lib/tally';
@@ -63,6 +64,8 @@ export default function Page() {
   const [hydrated, setHydrated] = useState(false);
   const [raceCard, setRaceCard] = useState<RaceCard | null>(null);
   const [results, setResults] = useState<ResultDay | null>(null);
+  /** 公式の直前情報。締切の10〜15分前にレースごとに入る */
+  const [tenji, setTenji] = useState<TenjiDay | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   /** 締切までの残り時間を出すための現在時刻。1分ごとに進める */
   const [now, setNow] = useState<Date | null>(null);
@@ -79,6 +82,7 @@ export default function Page() {
   const [archiveView, setArchiveView] = useState<{
     card: RaceCard | null;
     results: ResultDay | null;
+    tenji: TenjiDay | null;
     logs: RaceLog[];
   } | null>(null);
   const [dayPickerOpen, setDayPickerOpen] = useState(false);
@@ -158,8 +162,28 @@ export default function Page() {
     void fetchResults().then((fetched) => {
       if (fetched) setResults(fetched);
     });
+
+    /** 直前情報。まだ1レースも公開されていない時間帯は中身が空で返る */
+    void fetchBeforeInfo().then((fetched) => {
+      if (fetched) setTenji(fetched);
+    });
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  /**
+   * 開いている間だけ、直前情報を5分おきに取り直す。
+   *
+   * リード側は30分おきに書き出すが、締切前の1回でも新しいほうが役に立つ。
+   * 取れなければ前の内容を残す（オフラインで表示が消えないように）。
+   */
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void fetchBeforeInfo().then((fetched) => {
+        if (fetched) setTenji(fetched);
+      });
+    }, 300_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   /**
    * 締切までの残り時間を進める。1分ごとで足りる。
@@ -296,9 +320,12 @@ export default function Page() {
         return;
       }
       const stored = loadLogs(date);
-      const { card, results } = await fetchArchiveDay(date);
+      const [{ card, results }, pastTenji] = await Promise.all([
+        fetchArchiveDay(date),
+        fetchArchiveTenji(date),
+      ]);
       setViewDate(date);
-      setArchiveView({ card, results, logs: stored.logs });
+      setArchiveView({ card, results, tenji: pastTenji, logs: stored.logs });
       setArchiveNotice(
         card === null
           ? 'この日の出走表・結果は取得できませんでした。オンラインで開くと見られます。'
@@ -317,6 +344,7 @@ export default function Page() {
   );
   const activeCard = viewing ? (archiveView?.card ?? null) : raceCard;
   const activeResults = viewing ? (archiveView?.results ?? null) : results;
+  const activeTenji = viewing ? (archiveView?.tenji ?? null) : tenji;
 
   const stats = useMemo(() => aggregate(activeLogs), [activeLogs]);
   const exportText = useMemo(() => toPlainText(activeLogs, activeDate), [activeLogs, activeDate]);
@@ -477,6 +505,7 @@ export default function Page() {
             actualCourseRates={actualCourseRates}
             resultCount={stats.resultCount}
             results={activeResults}
+            tenji={activeTenji}
             focusRaceNo={form.raceNo}
             tenjiFastFor={tenjiFastFor}
             onImport={handleImportCard}

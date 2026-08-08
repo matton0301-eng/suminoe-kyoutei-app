@@ -41,6 +41,11 @@
 ## 実装時の絶対ルール
 
 - **番組表の桁位置を再推測しない。** `docs/03` §6 の確定表（実データ720行でエラー0件）に従う
+- **直前情報の HTML セレクタを勘で直さない。** `tests/fixtures/beforeinfo_*.html` が正。
+  壊れたらまず fixture を取り直して構造を確かめる。
+  **出走表の各行には「その選手の前走」欄があり、そこの艇番セルにも艇色 class が付く**。
+  tbody ごとに最初の1つだけを艇番として採ること（素朴に拾うと1レースが12艇に膨らむ。
+  1R は前走が無いので露見せず、9R の fixture が回帰テストになっている）
 - LZH解凍は `C:\Windows\System32\tar.exe`（bsdtar）を第一手段にする。**フルパス必須**（Git BashのGNU tarはLZH非対応）
 - 番組表の当日分は**当日朝5時台公開**。翌日分を取ろうとすると404になる（正常）。
   節の翌日の番組はその日のレースが終わってから組まれるため、前日には公式サイトにも存在しない。
@@ -149,22 +154,31 @@
 | タスク名 | 起動 | 内容 |
 |---|---|---|
 | `Suminoe-RaceCard-Refresh` | 8/9 5:10〜 | 番組表を取得しアプリを更新してデプロイ |
+| `Suminoe-Tenji-0809` | 8/9 12:00〜 | 直前情報（展示タイム）を取得しアプリを更新してデプロイ |
 | `Suminoe-Result-Review-0807` | 8/7 21:30〜 | 8/7の成績を取得し事前の読みと照合してデプロイ |
 | `Suminoe-Result-Review-0809` | 8/9 21:30〜 | 8/9の成績で同じことをする（観戦後の振り返り） |
 
-いずれも45分おきに8時間繰り返し、取得できた回で終わる。
+refresh と review は45分おきに8時間、**tenji だけ30分おきに10時間**繰り返す。
+tenji の間隔が短いのは、直前情報がレースごとに順次公開されるため
+（他の2つは「1日1回どこかで取れれば終わり」）。
 
-- 実体: `refresh-and-deploy.sh` / `review-and-deploy.sh`（`.cmd` がラッパー。**CRLF必須**）
-- **冪等**。すでに同じ日付が入っていれば何もしない。取り直すには `FORCE=1`
+- 実体: `refresh-and-deploy.sh` / `tenji-and-deploy.sh` / `review-and-deploy.sh`
+  （`.cmd` がラッパー。**CRLF必須**）
+- **冪等**。refresh/review はすでに同じ日付が入っていれば何もしない。
+  tenji は**前回と中身が同じならデプロイしない**（同じ日に何度も更新されるため、日付では判定できない）。
+  取り直すには `FORCE=1`
 - `StartWhenAvailable=true` なので、時刻にPCが起動していなくても**起動後すぐ実行**される
-- ログ: `tools/suminoe-read/logs/{refresh,review}-<date>.log`
-- 作り直すには `python make-task-xml.py --action review --date 2026-08-09 --time 21:30`
-  → `schtasks /create /xml "...task-review.xml" /tn "<名前>" /f`
+- ログ: `tools/suminoe-read/logs/{refresh,tenji,review}-<date>.log`
+- 作り直すには `python make-task-xml.py --action tenji --date 2026-08-09 --time 12:00`
+  → `schtasks /create /xml "...task-tenji.xml" /tn "<名前>" /f`
 
 **データの公開タイミング（実測）**
 - 番組表(B): 当日早朝5時台。当日昼に再更新されることがある
 - 成績(K): **全レース終了後**（8/6 は 20:53 JST）。レース前は中身が空の300バイトで存在するため、
   `MIN_CONTENT_BYTES` でサイズを見て弾いている
+- 直前情報(HTML): 各レースの**周回展示後**（締切の10〜15分前）に順次。
+  未公開でもページは 200 で返り、値が空なだけなので、
+  **展示タイムが1つも取れないこと**をもって「まだ」と判定している
 
 ## 環境（2026-08-07 確認済み）
 
@@ -179,7 +193,7 @@
 # スミノエ・ログ（apps/suminoe-log/ 内）
 npm run dev          # 開発サーバー
 npm run build        # 静的エクスポート + SW生成 → out/
-npm test             # 72ケース（vitest）
+npm test             # 117ケース（vitest）
 npm run typecheck
 npm run lint
 npm run icons        # PWAアイコン再生成
@@ -187,7 +201,9 @@ npm run icons        # PWAアイコン再生成
 # スミノエ・リード（tools/suminoe-read/ 内、PowerShell）
 .\venv\Scripts\Activate.ps1
 python main.py --date 2026-08-06 --dry-run --local-file tests\fixtures\B260806.TXT
-python -m pytest     # 52ケース（ネット接続不要）
+python beforeinfo.py                 # 直前情報（全12R）→ public/tenji.json
+python beforeinfo.py --races 1-3     # レースを絞る（公式へは1.5秒間隔）
+python -m pytest     # 94ケース（ネット接続不要）
 ```
 
 Git Bash から Python を叩くときは venv の実行ファイルを直接指定する:
@@ -213,8 +229,10 @@ python collect-history.py --days 150   # cache/history/ に蓄積（1.5秒間隔
 ## テストの方針
 
 - リード: pytest。`tests/fixtures/` に実LZH+TXTを同梱しているので**ネット接続なしで全件通る**
-- ログ: vitest。`lib/__fixtures__/racecard-20260806.json` はリードの実出力。
+- ログ: vitest。`lib/__fixtures__/racecard-20260806.json` と `tenji-20260808.json` はリードの実出力。
   **2ツール間のデータ契約テスト**になっており、リードのJSON形式を変えるとここが落ちる（意図的）
+- 直前情報は**公式の競走成績と突き合わせて検証できる**（成績TXTにも展示タイムが載っている）。
+  8/8 の72件で一致を確認した。スクレイピングを直したら同じ照合をやり直すこと
 
 ## 進捗
 
@@ -229,6 +247,8 @@ python collect-history.py --days 150   # cache/history/ に蓄積（1.5秒間隔
 - [x] 8/7: 収支タブ（賭式ごとの当選率・1点100円での回収率）
 - [x] 8/7: 展示の反映・締切の自動選択・レース連動・結果欄の折りたたみ
 - [x] 8/7: 明るいテーマ＋ナイター切替、波しぶきと艇のシルエット、日付固定の撤去
+- [x] 8/9: 直前情報の取得と表示（展示タイム・チルト・部品交換・スタート展示・水面気象）。
+      公式成績の展示タイム72件と突き合わせて一致を確認。`Suminoe-Tenji-0809` を登録・本番デプロイ済み
 - [ ] 8/8: Android 実機で機内モード検証（仕様 01 §8 のQAチェックリスト）
 - [ ] 8/7 夜: 照合タスクが走り、今日の結果がアプリに入る（動作確認になる）
 - [ ] 8/9 朝: 番組表の取得タスク / 8/9 夜: 照合タスク（要: PCが起動していること）

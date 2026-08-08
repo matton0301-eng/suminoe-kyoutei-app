@@ -16,6 +16,8 @@ export interface ArchiveDay {
   date: string;
   hasCard: boolean;
   hasResults: boolean;
+  /** 直前情報（展示タイム）が残っているか */
+  hasTenji: boolean;
 }
 
 /** 日付リストの1行。アーカイブの有無と、その日の観戦記録の件数 */
@@ -54,6 +56,7 @@ export function parseArchiveIndex(raw: string): ArchiveDay[] {
       date: day.date,
       hasCard: day.hasCard === true,
       hasResults: day.hasResults === true,
+      hasTenji: day.hasTenji === true,
     });
   }
   return days;
@@ -70,7 +73,13 @@ export function mergeDayEntries(
   }
   for (const [date, count] of Object.entries(logCounts)) {
     if (!isIsoDate(date) || byDate.has(date)) continue;
-    byDate.set(date, { date, hasCard: false, hasResults: false, logCount: count });
+    byDate.set(date, {
+      date,
+      hasCard: false,
+      hasResults: false,
+      hasTenji: false,
+      logCount: count,
+    });
   }
   return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
 }

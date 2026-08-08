@@ -17,15 +17,17 @@ const INDEX_PATH = join(ARCHIVE_DIR, 'index.json');
 
 mkdirSync(ARCHIVE_DIR, { recursive: true });
 
+/** ファイル名の種別 → index のフラグ名 */
+const KIND_FLAGS = { racecard: 'hasCard', results: 'hasResults', tenji: 'hasTenji' };
+
 const days = new Map();
 for (const name of readdirSync(ARCHIVE_DIR)) {
-  const match = /^(racecard|results)-(\d{8})\.json$/.exec(name);
+  const match = /^(racecard|results|tenji)-(\d{8})\.json$/.exec(name);
   if (!match) continue;
   const compact = match[2];
   const iso = `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
-  const day = days.get(iso) ?? { date: iso, hasCard: false, hasResults: false };
-  if (match[1] === 'racecard') day.hasCard = true;
-  else day.hasResults = true;
+  const day = days.get(iso) ?? { date: iso, hasCard: false, hasResults: false, hasTenji: false };
+  day[KIND_FLAGS[match[1]]] = true;
   days.set(iso, day);
 }
 
@@ -34,5 +36,7 @@ const payload = { schemaVersion: 1, days: sorted };
 writeFileSync(INDEX_PATH, JSON.stringify(payload, null, 1), 'utf8');
 console.log(`[build-archive-index] ${sorted.length} 日分を index.json に書き出しました`);
 for (const day of sorted) {
-  console.log(`  ${day.date} card=${day.hasCard} results=${day.hasResults}`);
+  console.log(
+    `  ${day.date} card=${day.hasCard} results=${day.hasResults} tenji=${day.hasTenji}`,
+  );
 }

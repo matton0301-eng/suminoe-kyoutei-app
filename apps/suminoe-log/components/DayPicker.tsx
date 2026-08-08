@@ -27,6 +27,7 @@ function entryLabel(entry: DayEntry): string {
   const parts: string[] = [];
   if (entry.hasCard && entry.hasResults) parts.push('出走表・結果あり');
   else if (entry.hasCard) parts.push('出走表あり');
+  if (entry.hasTenji) parts.push('展示あり');
   if (entry.logCount > 0) parts.push(`記録${entry.logCount}件`);
   return parts.length > 0 ? parts.join(' / ') : '記録なし';
 }

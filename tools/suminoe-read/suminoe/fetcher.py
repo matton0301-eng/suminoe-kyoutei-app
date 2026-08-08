@@ -1,12 +1,16 @@
-"""番組表・競走成績データの取得。
+"""番組表・競走成績・直前情報の取得。
 
 URL 規則（docs/03-bangumihyou-format.md §1 で実測・検証済み）:
     番組表:   https://www1.mbrace.or.jp/od2/B/{YYYYMM}/b{YY}{MM}{DD}.lzh
     競走成績: https://www1.mbrace.or.jp/od2/K/{YYYYMM}/k{YY}{MM}{DD}.lzh
+    直前情報: https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno={R}&jcd=12&hd={YYYYMMDD}
 
 **公開タイミングの注意（§2 実測）**:
   番組表   当日早朝5時台。翌日分は前夜には存在せず 404 になる（異常ではない）
   競走成績 全レース終了後（8/6 は 20:53 JST に確定）。レース前は中身が空のまま存在する
+  直前情報 各レースの周回展示後（締切の10〜15分前）に順次。未公開でもページ自体は返る
+
+前2つは配布ファイル（LZH）、直前情報だけは公式PCサイトの HTML を読む。
 """
 
 from __future__ import annotations
@@ -19,6 +23,12 @@ from pathlib import Path
 import requests
 
 BASE_ROOT = "https://www1.mbrace.or.jp/od2"
+
+#: 直前情報など、配布ファイルに無いものを読む公式PCサイト
+PC_SITE_ROOT = "https://www.boatrace.jp/owpc/pc/race"
+
+#: 場コード。住之江は 12
+SUMINOE_JCD = 12
 
 #: 取得できるデータの種類。B=番組表（出走表）、K=競走成績（結果）
 KIND_PROGRAM = "B"
@@ -162,6 +172,44 @@ def fetch_lzh(
     cached.write_bytes(response.content)
     log(f"  取得成功: {cached.name} ({len(response.content):,} バイト)")
     return cached
+
+
+def beforeinfo_url(target: date, race_no: int, jcd: int = SUMINOE_JCD) -> str:
+    return f"{PC_SITE_ROOT}/beforeinfo?rno={race_no}&jcd={jcd:02d}&hd={target:%Y%m%d}"
+
+
+def open_session() -> requests.Session:
+    """複数レースを続けて取るときに使い回すセッション。"""
+    return _session()
+
+
+def fetch_beforeinfo_html(
+    target: date,
+    race_no: int,
+    session: requests.Session | None = None,
+    log=print,
+) -> str:
+    """直前情報ページの HTML を1レースぶん取得する。
+
+    未公開でもページ自体は 200 で返る（値が空なだけ）。公開されたかどうかの
+    判定はパーサ側（展示タイムが1つも無ければ未公開）の役目で、ここでは見ない。
+
+    Raises:
+        FetchError: 404、空のレスポンス、または通信失敗。
+    """
+    url = beforeinfo_url(target, race_no)
+    response = _get(session or _session(), url)
+
+    if response.status_code == 404:
+        raise FetchError(
+            f"{target:%Y-%m-%d} {race_no}R の直前情報ページがありません（404）。\n"
+            "  その日に開催が無いか、レース番号が範囲外の可能性があります。"
+        )
+    if not response.content:
+        raise FetchError(f"{url} から空のレスポンスが返りました")
+
+    # 公式PCサイトは UTF-8。charset 推定に任せるとまれに cp1252 と誤判定される
+    return response.content.decode("utf-8", errors="replace")
 
 
 def read_text(path: Path, log=print) -> str:

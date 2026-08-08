@@ -1,11 +1,14 @@
 """Windows タスクスケジューラ用の XML を書き出す。
 
-2種類のタスクを作れる。
+3種類のタスクを作れる。
 
   refresh  番組表を取得してアプリを更新（当日早朝5〜6時公開なので 05:10 開始）
+  tenji    直前情報を取得してアプリを更新（1Rの周回展示に間に合うよう 12:00 開始）
   review   競走成績を取得して事前の読みと照合（全レース終了後なので 21:30 開始）
 
-いずれも45分おきに繰り返し、取得できた回で終わる。
+refresh と review は45分おき、tenji は30分おきに繰り返す。
+tenji だけ間隔が短いのは、直前情報がレースごとに順次公開されるため
+（他の2つは「1日1回どこかで取れれば終わり」）。
 対応するシェルスクリプトは冪等なので、成功後の実行は何もせず即終了する。
 
 重要な設定:
@@ -24,6 +27,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
+#: 繰り返しの既定。1日1回どこかで取れれば終わるタスク向け
+DEFAULT_INTERVAL = "PT45M"
+DEFAULT_DURATION = "PT8H"
+
 ACTIONS = {
     "refresh": {
         "cmd": "refresh-and-deploy.cmd",
@@ -31,6 +38,16 @@ ACTIONS = {
         "xml": "task-refresh.xml",
         "time": "05:10",
         "what": "番組表を取得してスミノエ・ログを更新し、Vercel にデプロイする",
+    },
+    "tenji": {
+        "cmd": "tenji-and-deploy.cmd",
+        "task": "Suminoe-Tenji",
+        "xml": "task-tenji.xml",
+        "time": "12:00",
+        "what": "直前情報（展示タイム）を取得してスミノエ・ログを更新し、Vercel にデプロイする",
+        # レースごとに順次公開されるので、短い間隔で最終レースまで回す
+        "interval": "PT30M",
+        "duration": "PT10H",
     },
     "review": {
         "cmd": "review-and-deploy.cmd",
@@ -50,8 +67,8 @@ TEMPLATE = """<?xml version="1.0" encoding="UTF-16"?>
     <TimeTrigger>
       <StartBoundary>{date}T{time}:00</StartBoundary>
       <Repetition>
-        <Interval>PT45M</Interval>
-        <Duration>PT8H</Duration>
+        <Interval>{interval}</Interval>
+        <Duration>{duration}</Duration>
         <StopAtDurationEnd>true</StopAtDurationEnd>
       </Repetition>
       <Enabled>true</Enabled>
@@ -93,6 +110,16 @@ TEMPLATE = """<?xml version="1.0" encoding="UTF-16"?>
 """
 
 
+def _readable(duration: str) -> str:
+    """"PT30M" → "30分"、"PT10H" → "10時間"。表示用（XML には元の値を書く）。"""
+    body = duration.removeprefix("PT")
+    if body.endswith("M"):
+        return f"{body[:-1]}分"
+    if body.endswith("H"):
+        return f"{body[:-1]}時間"
+    return duration
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--action", choices=sorted(ACTIONS), default="refresh")
@@ -105,10 +132,15 @@ def main() -> int:
     cmd_path = HERE / spec["cmd"]
     out_path = HERE / spec["xml"]
 
+    interval = spec.get("interval", DEFAULT_INTERVAL)
+    duration = spec.get("duration", DEFAULT_DURATION)
+
     xml = TEMPLATE.format(
         description=f"ボートレース住之江（{args.date}）: {spec['what']}。冪等なので何度実行しても安全。",
         date=args.date,
         time=time,
+        interval=interval,
+        duration=duration,
         command=str(cmd_path),
         workdir=str(HERE),
     )
@@ -117,7 +149,7 @@ def main() -> int:
     out_path.write_text(xml, encoding="utf-16")
     print(f"書き出し: {out_path} ({out_path.stat().st_size} バイト)")
     print(f"  内容: {spec['what']}")
-    print(f"  開始: {args.date} {time} から45分おきに8時間")
+    print(f"  開始: {args.date} {time} から {_readable(interval)} おきに {_readable(duration)}")
     print(f"  実行: {cmd_path} {args.date}")
     print()
     print("登録するには（管理者権限は不要）:")

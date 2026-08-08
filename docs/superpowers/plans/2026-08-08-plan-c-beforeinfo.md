@@ -1,5 +1,21 @@
 # Plan C: 直前情報(展示タイム・チルト・部品交換)の取り込み 実装計画
 
+> **2026-08-09 実装完了。** タスク `Suminoe-Tenji-0809` 登録済み・本番デプロイ済み。
+> 計画から変えた点は3つ。いずれも実データを見た結果で、意図した逸脱:
+>
+> 1. **beautifulsoup4 を入れなかった。** 標準ライブラリの `html.parser` で必要な3か所
+>    (出走表 / スタート展示 / 気象) を拾えたため、依存を増やさない選択をした
+> 2. **`weather.windDir` は `windDirNo`(番号) にした。** 公式ページに方位名の文字列が無く、
+>    アイコンの通し番号(`is-wind1`〜`is-wind17`)でしか公開されていない。推測で「北」とは書かない
+> 3. **出走表テーブルの `min-width` を外した。** 幅360pxの実測で7列でも307pxに収まる。
+>    以前の `min-w-[22rem]` は、収まる内容を352pxに引き伸ばして横スクロールを作っていた
+>    (展示列を足す前から45pxはみ出していた)
+>
+> 実装中に見つかった不具合: 出走表の各行にある「前走」欄の艇番セルにも艇色 class が付き、
+> 素朴に拾うと1レースが最大12艇に膨らむ。1R では前走が無いため fixture 1枚では見えず、
+> **実データ12レースを流して発覚した**。9R の fixture を回帰テストとして追加済み。
+> 展示タイムは公式の競走成績(別ソース)72件と突き合わせ、全件一致を確認した。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans (または subagent-driven-development) to implement this plan task-by-task.
 > **先に** [2026-08-08-enhancement-roadmap.md](2026-08-08-enhancement-roadmap.md) の共通制約を読むこと。
 

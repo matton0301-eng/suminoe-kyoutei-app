@@ -2,14 +2,22 @@
  "schemaVersion": 1,
  "days": [
   {
+   "date": "2026-08-09",
+   "hasCard": true,
+   "hasResults": false,
+   "hasTenji": true
+  },
+  {
    "date": "2026-08-08",
    "hasCard": true,
-   "hasResults": true
+   "hasResults": true,
+   "hasTenji": true
   },
   {
    "date": "2026-08-07",
    "hasCard": true,
-   "hasResults": true
+   "hasResults": true,
+   "hasTenji": false
   }
  ]
 }
