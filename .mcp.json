@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "suminoe": {
+      "command": "cmd",
+      "args": ["/c", "npx", "tsx", "tools/suminoe-mcp/server.ts"]
+    }
+  }
+}

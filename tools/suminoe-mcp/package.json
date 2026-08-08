@@ -1,0 +1,23 @@
+{
+  "name": "suminoe-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "住之江観戦ツールの記録・アーカイブ・オッズを Claude から読むための MCP サーバー（読み取り専用）",
+  "scripts": {
+    "start": "tsx server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "cheerio": "^1.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.11",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
