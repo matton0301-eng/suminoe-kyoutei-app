@@ -123,16 +123,11 @@ export function RecordTab({
             −
           </button>
 
+          {/* 鏡面反射は水面デザインの署名要素だった。新聞に映り込みは無いので外した */}
           <div className="flex min-w-0 flex-col items-center">
             <p
               className="tnum text-[4.25rem] font-black leading-[0.85] tracking-tight text-text-main"
               aria-live="polite"
-            >
-              {raceLabel}
-            </p>
-            <p
-              aria-hidden
-              className="mirror tnum text-[4.25rem] font-black leading-[0.85] tracking-tight text-text-main"
             >
               {raceLabel}
             </p>
