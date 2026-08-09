@@ -29,6 +29,7 @@ import {
   buildPatterns,
   formatPatternTicket,
   heatOf,
+  losesOnHit,
   type BetPattern,
   type Heat,
 } from '@/lib/patterns';
@@ -40,6 +41,7 @@ import type { ResultDay } from '@/lib/results';
 import { BOAT_COLORS, type Boat } from '@/lib/types';
 
 import { RaceOutcome } from './RaceOutcome';
+import { StakePicker, stakeYen } from './StakePicker';
 
 interface BetsTabProps {
   card: RaceCard | null;
@@ -88,7 +90,10 @@ export function BetsTab({
 }: BetsTabProps) {
   const [pasted, setPasted] = useState('');
   /** 「買った」を押したときの1点あたりの金額。現地で変えるので state で持つ */
-  const [unitYen, setUnitYen] = useState(100);
+  // 1点あたりの賭け金は「数字 × 単位」で持つ（1〜30 × 百/千/万）
+  const [stakeAmount, setStakeAmount] = useState(1);
+  const [stakeUnit, setStakeUnit] = useState(100);
+  const unitYen = stakeYen(stakeAmount, stakeUnit);
   const [selectedRaceNo, setSelectedRaceNo] = useState<number>(focusRaceNo);
 
   /**
@@ -458,25 +463,15 @@ export function BetsTab({
             </span>
           </div>
           {onBuy && !readOnly ? (
-            <div className="flex items-center gap-1.5 border border-line bg-bg-panel px-2 py-1.5">
-              <span className="text-[11px] text-text-mute">1点</span>
-              {[100, 200, 500, 1000].map((yen) => (
-                <button
-                  key={yen}
-                  type="button"
-                  onClick={() => setUnitYen(yen)}
-                  aria-pressed={unitYen === yen}
-                  className={[
-                    'tnum min-h-9 flex-1 border px-1 text-xs font-bold',
-                    unitYen === yen
-                      ? 'on-accent border-accent bg-accent'
-                      : 'border-line text-text-mute',
-                  ].join(' ')}
-                >
-                  {yen}
-                </button>
-              ))}
-            </div>
+            <StakePicker
+              amount={stakeAmount}
+              unit={stakeUnit}
+              onChange={(nextAmount, nextUnit) => {
+                setStakeAmount(nextAmount);
+                setStakeUnit(nextUnit);
+              }}
+              points={patterns[0]?.points ?? 0}
+            />
           ) : null}
           {patterns.map((pattern) => (
             <PatternCard
@@ -687,6 +682,7 @@ function PatternCard({
   const worthwhile = pattern.expectedValue !== null && pattern.expectedValue >= BREAK_EVEN;
   const empty = pattern.points === 0;
   const heat = heatOf(pattern.hitProbability, pattern.betTypeName);
+  const deadPoints = pattern.tickets.filter((ticket) => losesOnHit(ticket, pattern.points)).length;
 
   return (
     <section
@@ -732,21 +728,46 @@ function PatternCard({
 
       {empty ? null : (
         <ul className="mt-2 flex flex-wrap gap-1.5">
-          {pattern.tickets.map((ticket) => (
-            <li
-              key={ticket.boats.join('-')}
-              className="tnum rounded border border-line bg-bg-raised px-2 py-1 text-sm font-bold text-text-main"
-            >
-              {formatPatternTicket(ticket, pattern.ordered)}
-              {ticket.odds !== null ? (
-                <span className="ml-1.5 text-[10px] font-normal text-text-mute">
-                  {ticket.odds.toFixed(1)}倍
-                </span>
-              ) : null}
-            </li>
-          ))}
+          {pattern.tickets.map((ticket) => {
+            /**
+             * この点が当たっても、まとめ買いした分を取り戻せないか。
+             * オッズが点数以下だとそうなる（賭け金の大小によらない）。
+             * 8/9 の 8R 1=3=4（2.5倍を3点）、12R 1=2=3（3.0倍を3点＝同額）で実際に起きた。
+             */
+            const dead = losesOnHit(ticket, pattern.points);
+            return (
+              <li
+                key={ticket.boats.join('-')}
+                className={[
+                  'tnum rounded border px-2 py-1 text-sm font-bold',
+                  dead
+                    ? 'border-dashed border-text-mute bg-bg-raised text-text-mute'
+                    : 'border-line bg-bg-raised text-text-main',
+                ].join(' ')}
+              >
+                {formatPatternTicket(ticket, pattern.ordered)}
+                {ticket.odds !== null ? (
+                  <span className="ml-1.5 text-[10px] font-normal text-text-mute">
+                    {ticket.odds.toFixed(1)}倍
+                  </span>
+                ) : null}
+                {dead ? (
+                  <span className="ml-1 text-[10px] font-normal text-text-mute">当たっても損</span>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
+
+      {/* 点数ぶんを取り戻せない点があるなら、買う前に言う */}
+      {deadPoints > 0 ? (
+        <p className="tnum mt-1.5 border-l-2 border-text-mute pl-2 text-[11px] text-text-mute">
+          この{pattern.points}点を同額で買うと、
+          <strong className="text-text-main">{deadPoints}点は当たっても収支がプラスになりません</strong>
+          （オッズが{pattern.points}倍以下）。
+        </p>
+      ) : null}
 
       {pattern.expectedValue !== null ? (
         <p className="tnum mt-2 text-sm">
@@ -755,7 +776,8 @@ function PatternCard({
             {Math.round(pattern.expectedValue * 100)}%
           </strong>
           <span className="text-[11px] text-text-mute">
-            （1点100円 × {pattern.points}点 に対して）
+            （1点 {unitYen.toLocaleString('ja-JP')}円 × {pattern.points}点 ={' '}
+            {(unitYen * pattern.points).toLocaleString('ja-JP')}円 に対して）
           </span>
         </p>
       ) : null}

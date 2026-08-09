@@ -11,7 +11,7 @@ import { describe, it } from 'vitest';
 
 import type { BetSuggestion } from './betting';
 import type { RaceOddsData } from './odds';
-import { buildPatterns, heatOf } from './patterns';
+import { buildPatterns, heatOf, losesOnHit } from './patterns';
 import { buildProbabilities } from './probability';
 import type { BoatScore } from './betting';
 import type { Boat } from './types';
@@ -242,5 +242,98 @@ describe('期待度', () => {
   it('境界のすぐ下では段が上がらない', () => {
     assert.equal(heatOf(0.199, '3連単').level, 2);
     assert.equal(heatOf(0.619, '3連複').level, 4);
+  });
+});
+
+/**
+ * 2026-08-09 の現地で見つかった2つの誤りを固定する。
+ *
+ * 1. 「勝負」を期待値順で選んでいた（未検証の選び方だった。当日 0/7）
+ * 2. 「堅実」に乖離の上限が掛かっていなかった（1点で的中率と期待値が水増しされた）
+ */
+describe('選び方の基準（8/9 の修正）', () => {
+  /** 特定の1点だけオッズを跳ね上げ、市場が薄く見ている状態を作る */
+  function withInflated(key: string, odds: number): RaceOddsData {
+    const base = fairOdds();
+    const trio = new Map(base.trio);
+    const trifecta = new Map(base.trifecta);
+    if (trio.has(key)) trio.set(key, odds);
+    if (trifecta.has(key)) trifecta.set(key, odds);
+    return { ...base, trio, trifecta };
+  }
+
+  it('勝負は確率の高い順に選ぶ（期待値順にしない）', () => {
+    // 確率3位の点のオッズだけを跳ね上げても、並び順は変わらない
+    const anchorFirst = [...PROBABILITY.trifecta.entries()]
+      .filter(([key]) => key.startsWith('1-'))
+      .sort((a, b) => b[1] - a[1]);
+    const third = anchorFirst[2][0];
+
+    const { challenge } = patternsOf(fairOdds());
+    const before = challenge.tickets.map((t) => t.boats.join('-'));
+
+    // オッズを2倍にすると期待値順なら先頭に来るが、確率順なら3番目のまま
+    const bumped = patternsOf(withInflated(third, (fairOdds().trifecta.get(third) ?? 1) * 2));
+    const after = bumped.challenge.tickets.map((t) => t.boats.join('-'));
+
+    assert.deepEqual(after, before, 'オッズが動いても並びは確率順のまま');
+    assert.equal(after[2], third);
+  });
+
+  it('勝負の並びは常に確率降順', () => {
+    const { challenge } = patternsOf(fairOdds());
+    const probabilities = challenge.tickets.map((t) => t.probability);
+    assert.deepEqual(probabilities, [...probabilities].sort((a, b) => b - a));
+  });
+
+  it('堅実は市場と3倍を超えて食い違う点を外す', () => {
+    const top = [...PROBABILITY.trio.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    // オッズを10倍にすると市場の暗黙確率が1/10になり、乖離が上限を超える
+    const inflated = withInflated(top, (fairOdds().trio.get(top) ?? 1) * 10);
+    const { steady } = patternsOf(inflated);
+    const keys = steady.tickets.map((t) => t.boats.join('-'));
+    assert.ok(!keys.includes(top), '乖離が大きい点は堅実に入れない');
+    assert.equal(steady.points, 3, '外したぶんは次の候補で埋める');
+  });
+
+  it('乖離で外しても、残った点は確率降順のまま', () => {
+    const top = [...PROBABILITY.trio.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    const { steady } = patternsOf(withInflated(top, (fairOdds().trio.get(top) ?? 1) * 10));
+    const probabilities = steady.tickets.map((t) => t.probability);
+    assert.deepEqual(probabilities, [...probabilities].sort((a, b) => b - a));
+  });
+
+  it('オッズが無ければ乖離で外せないので、確率上位がそのまま残る', () => {
+    const { steady } = patternsOf(null);
+    assert.equal(steady.points, 3);
+    assert.equal(steady.expectedValue, null);
+  });
+});
+
+describe('losesOnHit（当たっても負ける買い目）', () => {
+  const ticket = (odds: number | null) => ({
+    boats: [1, 2, 3] as Boat[],
+    probability: 0.1,
+    odds,
+    marketProbability: null,
+  });
+
+  it('オッズが点数以下なら、当たっても取り戻せない', () => {
+    assert.equal(losesOnHit(ticket(2.5), 3), true, '2.5倍を3点買い → 当たって−0.5点ぶん');
+    assert.equal(losesOnHit(ticket(3.0), 3), true, 'ちょうど同額でもプラスにはならない');
+  });
+
+  it('オッズが点数を超えていればプラスになる', () => {
+    assert.equal(losesOnHit(ticket(3.1), 3), false);
+    assert.equal(losesOnHit(ticket(7.0), 3), false);
+  });
+
+  it('点数が増えるほど、必要なオッズも上がる', () => {
+    assert.equal(losesOnHit(ticket(5.0), 3), false);
+    assert.equal(losesOnHit(ticket(5.0), 6), true, '6点買いなら5倍では足りない');
+  });
+
+  it('オッズが取れていなければ判定しない', () => {
+    assert.equal(losesOnHit(ticket(null), 3), false);
   });
 });

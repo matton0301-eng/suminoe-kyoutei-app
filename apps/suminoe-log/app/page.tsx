@@ -19,6 +19,7 @@ import { HitCelebration } from '@/components/HitCelebration';
 import { DayPicker } from '@/components/DayPicker';
 import { ExportTab } from '@/components/ExportTab';
 import { LogList } from '@/components/LogList';
+import { OddsTab } from '@/components/OddsTab';
 import { RecordTab } from '@/components/RecordTab';
 import { StatsTab } from '@/components/StatsTab';
 import { TallyTab } from '@/components/TallyTab';
@@ -30,13 +31,19 @@ import { hitsByOrder, summarizeBets, type Bet } from '@/lib/bets';
 import { fetchArchiveDay, fetchArchiveIndex, mergeDayEntries, type DayEntry } from '@/lib/archive';
 import type { MultiTally } from '@/lib/multiTally';
 import { loadMultiTally } from '@/lib/totalLoader';
-import { createId, formReducer, nextRaceNo, toRaceLog } from '@/lib/formReducer';
+import {
+  createId,
+  formHasContent,
+  formReducer,
+  nextRaceNo,
+  toRaceLog,
+} from '@/lib/formReducer';
 import { toCsv, toPlainText } from '@/lib/exporters';
 import { fetchBundledCard, parseRaceCard, type RaceCard } from '@/lib/raceCard';
 import { formatDateLabel, todayIso } from '@/lib/raceDate';
 import { fetchArchiveTenji, fetchBeforeInfo, type TenjiDay } from '@/lib/beforeInfo';
 import { fetchCalibration, type Calibration } from '@/lib/calibration';
-import { fetchArchiveOdds, fetchOddsDay, type OddsDay } from '@/lib/odds';
+import { fetchArchiveOdds, fetchOddsDay, formatFetchedAt, type OddsDay } from '@/lib/odds';
 import { fetchResults, type ResultDay } from '@/lib/results';
 import { formatMinutesLeft, isUrgent, minutesUntil, resolveSchedule } from '@/lib/schedule';
 import { tallyDay } from '@/lib/tally';
@@ -53,12 +60,13 @@ import {
   saveLogs,
   saveRaceCardRaw,
 } from '@/lib/storage';
-import { EMPTY_FORM, type Boat, type RaceLog } from '@/lib/types';
+import { EMPTY_FORM, type Boat, type FormState, type RaceLog } from '@/lib/types';
 
 type PendingConfirm = 'saveWithoutResult' | 'clearAll' | null;
 
 export default function Page() {
-  const [tab, setTab] = useState<TabKey>('record');
+  // 起動時は買い目。現地で最初に見るのはここで、記録は結果が出てから触る
+  const [tab, setTab] = useState<TabKey>('bets');
   const [logs, setLogs] = useState<RaceLog[]>([]);
   const [form, dispatch] = useReducer(formReducer, EMPTY_FORM);
   const [toast, setToast] = useState<string | null>(null);
@@ -241,20 +249,51 @@ export default function Page() {
     [raceDate],
   );
 
-  const commit = useCallback(() => {
-    /**
-     * 同じレースの記録があれば**上書きする**。
-     * 買い目タブの「買った」は記録を先に作るので、そのあと結果を保存したときに
-     * 新しい行を足すと 1R が2つできてしまう（実際に踏んだ）。
-     */
-    const editingId = form.editingId;
-    const existing =
-      editingId !== null
-        ? (logs.find((log) => log.id === editingId) ?? null)
-        : (logs.find((log) => log.raceNo === form.raceNo) ?? null);
+  /**
+   * フォームの内容を記録の配列に畳み込む。保存も画面遷移もしない、純粋な組み立て。
+   *
+   * 同じレースの記録があれば**上書きする**。
+   * 買い目タブの「買った」は記録を先に作るので、そのあと結果を保存したときに
+   * 新しい行を足すと 1R が2つできてしまう（実際に踏んだ）。
+   */
+  const foldIntoLogs = useCallback(
+    (source: FormState, current: RaceLog[]) => {
+      const existing =
+        source.editingId !== null
+          ? (current.find((log) => log.id === source.editingId) ?? null)
+          : (current.find((log) => log.raceNo === source.raceNo) ?? null);
 
-    // 買い目タブから入れた舟券はフォームに無いことがあるので、既存の記録から引き継ぐ
-    const bets = form.bets.length > 0 ? form.bets : (existing?.bets ?? []);
+      /**
+       * 買い目タブから入れた舟券はフォームに無いことがあるので、既存の記録から引き継ぐ。
+       *
+       * **ただし「見（ケン）」が立っているときは引き継がない。**
+       * 引き継ぐと「舟券を買った」と「買わずに見た」が同じ記録に同居する。
+       * 見送ったという申告のほうが後から出た意思なので、そちらを採る。
+       */
+      const bets = source.ken
+        ? []
+        : source.bets.length > 0
+          ? source.bets
+          : (existing?.bets ?? []);
+
+      const saved: RaceLog = {
+        ...toRaceLog(source, existing?.id ?? createId()),
+        bets,
+        ken: source.ken || (bets.length === 0 && (existing?.ken ?? false)),
+        savedAt: existing?.savedAt ?? new Date().toISOString(),
+      };
+
+      const next = existing
+        ? current.map((log) => (log.id === saved.id ? saved : log))
+        : [...current, saved];
+
+      return { saved, next, isUpdate: existing !== null, bets };
+    },
+    [],
+  );
+
+  const commit = useCallback(() => {
+    const { next, isUpdate, bets } = foldIntoLogs(form, logs);
 
     // 当たっていれば祝う。公式の払戻はまだ来ていないので、入力した着順だけで判定する
     const hits = hitsByOrder(bets, [form.resultFirst, form.resultSecond, form.resultThird]);
@@ -262,22 +301,31 @@ export default function Page() {
       setCelebration((current) => ({ hits, token: current.token + 1 }));
     }
 
-    const saved = {
-      ...toRaceLog(form, existing?.id ?? createId()),
-      bets,
-      ken: form.ken || (bets.length === 0 && (existing?.ken ?? false)),
-      savedAt: existing?.savedAt ?? new Date().toISOString(),
-    };
-
-    persist(
-      existing
-        ? logs.map((log) => (log.id === saved.id ? saved : log))
-        : [...logs, saved],
-    );
-    setToast(`${form.raceNo}R を${existing ? '修正' : '記録'}しました`);
+    persist(next);
+    setToast(`${form.raceNo}R を${isUpdate ? '修正' : '記録'}しました`);
     dispatch({ type: 'reset', raceNo: nextRaceNo(form.raceNo) });
     clearDraft(raceDate);
-  }, [form, logs, persist, raceDate]);
+  }, [foldIntoLogs, form, logs, persist, raceDate]);
+
+  /**
+   * レースを移る。
+   *
+   * 入力途中の内容があれば**そのレースの記録として先に保存してから**移る。
+   * 保存せずに移ると入力が消え、持ち越すと前のレースの「見」や着順が
+   * 次のレースに波及する（2026-08-09 の現地で後者を踏んだ）。どちらも避ける。
+   */
+  const handleChangeRace = useCallback(
+    (target: number) => {
+      const base = formHasContent(form) ? foldIntoLogs(form, logs).next : logs;
+      if (base !== logs) persist(base);
+      dispatch({
+        type: 'selectRace',
+        raceNo: target,
+        log: base.find((log) => log.raceNo === target) ?? null,
+      });
+    },
+    [foldIntoLogs, form, logs, persist],
+  );
 
   const handleSave = useCallback(() => {
     // 未入力でも保存できてよい。ただし結果1着が空のときだけ確認する。
@@ -468,7 +516,7 @@ export default function Page() {
   if (!autoPicked && hydrated && schedule?.currentRaceNo) {
     setAutoPicked(true);
     if (logs.length === 0 && form.editingId === null && schedule.currentRaceNo !== form.raceNo) {
-      dispatch({ type: 'stepRaceNo', delta: schedule.currentRaceNo - form.raceNo });
+      dispatch({ type: 'selectRace', raceNo: schedule.currentRaceNo, log: null });
     }
   }
 
@@ -530,6 +578,19 @@ export default function Page() {
             <ThemeToggle />
           </div>
         </div>
+        {/*
+          データの鮮度を常時出す。
+          8/9 に端末が古いオッズを掴んだまま数時間気づけなかった。
+          この2つの時刻が動いていないことが、そのまま異常の合図になる。
+        */}
+        <div className="mx-auto flex max-w-lg items-baseline gap-3 px-3 pb-1 text-[10px] text-text-mute">
+          <span className="tnum">
+            オッズ {activeOdds ? (formatFetchedAt(activeOdds.updatedAt) ?? '—') : '未取得'}
+          </span>
+          <span className="tnum">
+            展示 {activeTenji ? (formatFetchedAt(activeTenji.updatedAt) ?? '—') : '未取得'}
+          </span>
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-lg flex-1 px-1.5 py-3">
@@ -578,6 +639,7 @@ export default function Page() {
               race={currentRace}
               deadlineLabel={formatMinutesLeft(selectedMinutesLeft)}
               deadlineUrgent={isUrgent(selectedMinutesLeft)}
+              onChangeRace={handleChangeRace}
               onSave={handleSave}
               onEditLast={handleEditLast}
               onCancelEdit={handleCancelEdit}
@@ -601,6 +663,15 @@ export default function Page() {
             onClearCard={handleClearCard}
             importError={importError}
             readOnly={viewing}
+          />
+        ) : null}
+
+        {tab === 'odds' ? (
+          <OddsTab
+            odds={activeOdds}
+            raceCard={activeCard}
+            raceNo={form.raceNo}
+            onChangeRace={handleChangeRace}
           />
         ) : null}
 

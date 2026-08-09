@@ -202,8 +202,18 @@ export function buildPatterns(
   const trioOdds = odds && odds.trio.size > 0 ? odds.trio : null;
   const trifectaOdds = odds && odds.trifecta.size > 0 ? odds.trifecta : null;
 
-  // --- 堅実: 3連複の確率上位 ---
-  const steadyTickets = rank(probability.trio, trioOdds).slice(0, STEADY_POINTS);
+  /**
+   * --- 堅実: 3連複の確率上位 ---
+   *
+   * **乖離が上限を超える点は除く。** 2026-08-09 の 11R で 1=5=6 が
+   * モデル16.8% / 市場1.75%（乖離9.6倍）のまま堅実に入り、
+   * 表示上の期待値を2.37まで押し上げていた。片方が大きく間違っているとき、
+   * 63開催日のモデルより数千万円の投票のほうが正しい可能性が高い。
+   * 除かずに残すと、的中率も期待値も同時に水増しされる。
+   */
+  const steadyTickets = rank(probability.trio, trioOdds)
+    .filter(withinEdgeLimit)
+    .slice(0, STEADY_POINTS);
   const steady = buildPattern(
     'steady',
     '堅実',
@@ -213,14 +223,29 @@ export function buildPatterns(
     trioOdds !== null,
   );
 
-  // --- 勝負: 軸1着固定の3連単。オッズがあれば期待値順、無ければ確率順 ---
+  /**
+   * --- 勝負: 軸1着固定の3連単を、確率の高い順に ---
+   *
+   * **期待値順で選ばない。** 8/9 に一度そうしたが、期待値順は
+   * 「モデルが市場より強気な点」を上に持ってくる操作と同じで、
+   * 本命どおりの決着（オッズが安い＝期待値が低い）を確率が高くても落とす。
+   *
+   * 戻した理由は**当日の成績ではない**。8/9 の全12レースで測ると
+   * 期待値順 1/12・回収率93%、確率順 4/12・回収率85% で、
+   * むしろ期待値順のほうが高かった（11R の 6,730円を1本引き当てたため）。
+   * **12レースでは何も決まらない。**
+   *
+   * 戻したのは、確率順が743レースで検証済み（的中率29.2% / 回収率74.7%）なのに対し、
+   * 期待値順は過去の全オッズが無く**検証できていない**から。
+   * 検証済みの方法を、未検証の方法で置き換えてはいけない。
+   * オッズの時系列を貯め終えたら、そのとき初めて比べ直す。
+   * 期待値は表示するが、選ぶ基準には使わない。
+   */
   const anchorFirst = rank(probability.trifecta, trifectaOdds).filter(
     (ticket) => ticket.boats[0] === suggestion.anchor,
   );
   const challengePool = trifectaOdds
-    ? anchorFirst
-        .filter((ticket) => ticket.odds !== null && withinEdgeLimit(ticket))
-        .sort((a, b) => b.probability * (b.odds ?? 0) - a.probability * (a.odds ?? 0))
+    ? anchorFirst.filter((ticket) => ticket.odds !== null && withinEdgeLimit(ticket))
     : anchorFirst;
   const challengeTickets = challengePool.slice(0, CHALLENGE_POINTS);
   const challenge = buildPattern(
@@ -228,9 +253,7 @@ export function buildPatterns(
     '勝負',
     '3連単',
     challengeTickets,
-    trifectaOdds
-      ? `${suggestion.anchor}号艇を1着に固定し、期待値の高い順に${challengeTickets.length}点。`
-      : `${suggestion.anchor}号艇を1着に固定し、確率の高い順に${challengeTickets.length}点。`,
+    `${suggestion.anchor}号艇を1着に固定し、確率の高い順に${challengeTickets.length}点。`,
     trifectaOdds !== null,
   );
 
@@ -266,6 +289,22 @@ export function buildPatterns(
 
 export function formatPatternTicket(ticket: PatternTicket, ordered: boolean): string {
   return ticket.boats.join(ordered ? '-' : '=');
+}
+
+/**
+ * この1点が当たっても、その型をまとめ買いした分を取り戻せないか。
+ *
+ * N点を同額ずつ買うと、1点あたりの賭け金を u として投資は N×u。
+ * ある点が当たったときの払戻は オッズ×u なので、
+ * **オッズが点数以下なら、当たっても収支がプラスにならない。**
+ * 賭け金 u が約分されて消えるので、金額によらず点数とオッズだけで決まる。
+ *
+ * 2026-08-09 の 8R 1=3=4（2.5倍を3点買い）と
+ * 12R 1=2=3（3.0倍を3点買い＝ちょうど同額）で実際に起きた。
+ * 買う前に見えていないと意味がないので、買い目カードに出す。
+ */
+export function losesOnHit(ticket: PatternTicket, points: number): boolean {
+  return ticket.odds !== null && ticket.odds <= points;
 }
 
 /**

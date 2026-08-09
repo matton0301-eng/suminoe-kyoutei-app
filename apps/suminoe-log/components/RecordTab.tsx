@@ -36,6 +36,11 @@ interface RecordTabProps {
   deadlineLabel: string | null;
   /** 締切が近い（5分以内） */
   deadlineUrgent: boolean;
+  /**
+   * レースを移る。入力途中の内容は移る前にそのレースへ保存される。
+   * dispatch で raceNo だけを変えてはいけない（前のレースの「見」が波及する）。
+   */
+  onChangeRace: (raceNo: number) => void;
   onSave: () => void;
   onEditLast: () => void;
   onCancelEdit: () => void;
@@ -68,6 +73,7 @@ export function RecordTab({
   race,
   deadlineLabel,
   deadlineUrgent,
+  onChangeRace,
   onSave,
   onEditLast,
   onCancelEdit,
@@ -117,7 +123,7 @@ export function RecordTab({
             type="button"
             aria-label="レース番号を1つ戻す"
             disabled={form.raceNo <= MIN_RACE_NO}
-            onClick={() => dispatch({ type: 'stepRaceNo', delta: -1 })}
+            onClick={() => onChangeRace(form.raceNo - 1)}
             className="min-h-14 min-w-14 shrink-0 rounded-lg border border-line bg-bg-raised text-2xl font-black text-text-main disabled:opacity-25"
           >
             −
@@ -137,7 +143,7 @@ export function RecordTab({
             type="button"
             aria-label="レース番号を1つ進める"
             disabled={form.raceNo >= MAX_RACE_NO}
-            onClick={() => dispatch({ type: 'stepRaceNo', delta: 1 })}
+            onClick={() => onChangeRace(form.raceNo + 1)}
             className="min-h-14 min-w-14 shrink-0 rounded-lg border border-line bg-bg-raised text-2xl font-black text-text-main disabled:opacity-25"
           >
             ＋
@@ -208,13 +214,20 @@ export function RecordTab({
         )}
 
         <div className="flex items-baseline gap-2 pb-1">
+          {/*
+            買った舟券があるうちは「見」にできない。
+            押せてしまうと、記録した舟券が1タップで消える（金額の記録なので取り返しがつかない）。
+            見送りに変えたいなら、上の「消す」で1点ずつ外してから押す。
+          */}
           <button
             type="button"
             onClick={() => dispatch({ type: 'toggleKen' })}
             aria-pressed={form.ken}
+            disabled={form.bets.length > 0}
             className={[
               'min-h-11 border px-3 text-sm font-bold',
               form.ken ? 'on-accent border-accent bg-accent' : 'border-line text-text-mute',
+              form.bets.length > 0 ? 'opacity-40' : '',
             ].join(' ')}
           >
             見（ケン）
@@ -225,6 +238,11 @@ export function RecordTab({
             </span>
           ) : null}
         </div>
+        {form.bets.length > 0 ? (
+          <p className="text-[11px] text-text-mute">
+            買った舟券があるので「見」にはできません。見送りに直すなら、上の「消す」で外してください。
+          </p>
+        ) : null}
       </Section>
 
       {/* ③ 結果（2着・3着は折りたたむ） */}

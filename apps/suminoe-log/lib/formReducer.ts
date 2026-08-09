@@ -19,7 +19,7 @@ import {
 } from './types';
 
 export type FormAction =
-  | { type: 'stepRaceNo'; delta: number }
+  | { type: 'selectRace'; raceNo: number; log: RaceLog | null }
   | { type: 'setResult'; place: ResultPlace; boat: Boat }
   | { type: 'addBets'; bets: Bet[] }
   | { type: 'removeBet'; index: number }
@@ -55,10 +55,55 @@ function assignResult(state: FormState, place: ResultPlace, boat: Boat): FormSta
   return next;
 }
 
+/**
+ * 入力されたものが何かあるか。
+ *
+ * レースを移るときに「保存する価値のある内容か」を判断するために使う。
+ * 空のフォームまで保存すると、押しただけのレースが記録に増える。
+ */
+export function formHasContent(form: FormState): boolean {
+  return (
+    form.bets.length > 0 ||
+    form.ken ||
+    form.resultFirst !== null ||
+    form.resultSecond !== null ||
+    form.resultThird !== null ||
+    form.kimarite !== null ||
+    form.suimen !== null ||
+    form.memo.trim() !== ''
+  );
+}
+
+/** そのレースの記録を読み込んだ状態にする。記録が無ければ空のフォーム。 */
+function loadRace(raceNo: number, log: RaceLog | null): FormState {
+  const clamped = clampRaceNo(raceNo);
+  if (!log) return { ...EMPTY_FORM, raceNo: clamped };
+  return {
+    raceNo: clamped,
+    bets: log.bets,
+    ken: log.ken,
+    resultFirst: log.resultFirst,
+    resultSecond: log.resultSecond,
+    resultThird: log.resultThird,
+    kimarite: log.kimarite,
+    suimen: log.suimen,
+    memo: log.memo,
+    editingId: log.id,
+  };
+}
+
 export function formReducer(state: FormState, action: FormAction): FormState {
   switch (action.type) {
-    case 'stepRaceNo':
-      return { ...state, raceNo: clampRaceNo(state.raceNo + action.delta) };
+    /**
+     * レースを移る。
+     *
+     * **前のレースの内容を持ち越さない。** 以前は raceNo だけを差し替えていたため、
+     * 3R で「見」を押してから 4R に送ると 4R も「見」になっていた
+     * （2026-08-09 の現地で発覚。着順・決まり手・メモも同じように波及していた）。
+     * 移った先に記録があればそれを読み込み、無ければ空にする。
+     */
+    case 'selectRace':
+      return loadRace(action.raceNo, action.log);
 
     case 'setResult':
       return assignResult(state, action.place, action.boat);
@@ -92,18 +137,7 @@ export function formReducer(state: FormState, action: FormAction): FormState {
       return { ...EMPTY_FORM, raceNo: clampRaceNo(action.raceNo) };
 
     case 'loadForEdit':
-      return {
-        raceNo: action.log.raceNo,
-        bets: action.log.bets,
-        ken: action.log.ken,
-        resultFirst: action.log.resultFirst,
-        resultSecond: action.log.resultSecond,
-        resultThird: action.log.resultThird,
-        kimarite: action.log.kimarite,
-        suimen: action.log.suimen,
-        memo: action.log.memo,
-        editingId: action.log.id,
-      };
+      return loadRace(action.log.raceNo, action.log);
 
     case 'restore':
       return { ...action.form, raceNo: clampRaceNo(action.form.raceNo) };
