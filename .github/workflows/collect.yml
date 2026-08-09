@@ -1,0 +1,145 @@
+# 住之江のデータを自動で集めてデプロイする。
+#
+# **これがある目的は、PCの起動に依存しないこと。**
+# それまでは Windows タスクスケジューラで回していたので、PCが落ちている日は
+# その日のオッズが永久に取れなかった（オッズは過去に遡って取得できない）。
+#
+# 時刻はすべて UTC で書く。JST = UTC + 9時間。
+#
+# 実行に必要なもの（リポジトリの Settings > Secrets and variables > Actions）:
+#   VERCEL_TOKEN        Vercel の Account Settings > Tokens で発行
+#   VERCEL_ORG_ID       ローカルの apps/suminoe-log/.vercel/project.json の orgId
+#   VERCEL_PROJECT_ID   同 projectId
+#
+# 秘密情報はここに書かない。ワークフローは public でも Secrets は公開されない。
+
+name: 住之江データ収集
+
+on:
+  schedule:
+    # 番組表（当日5時台公開）: JST 05:10〜08:00 を45分おき = UTC 20:10〜23:00
+    - cron: '10,55 20 * * *'
+    - cron: '40 21 * * *'
+    - cron: '25 22 * * *'
+    # 直前情報とオッズ: JST 12:00〜22:00 を15分おき = UTC 03:00〜13:00
+    - cron: '0,15,30,45 3-13 * * *'
+    # 成績の照合: JST 21:30〜23:00 を45分おき = UTC 12:30〜14:00
+    - cron: '30 12 * * *'
+    - cron: '15 13 * * *'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: '手動で回す処理'
+        required: true
+        default: tenji
+        type: choice
+        options: [refresh, tenji, review]
+      date:
+        description: '対象日 (YYYY-MM-DD)。空なら今日'
+        required: false
+
+# 同時に走らせない。前の回がデプロイ中に次が始まると、古い内容で上書きされる
+concurrency:
+  group: suminoe-collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    # 取りこぼしよりも暴走を止めるほうを優先する。通常は3分で終わる
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            apps/suminoe-log/package-lock.json
+            tools/suminoe-mcp/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # どの処理を回すかを、起動した時刻（JST）から決める。
+      # 手動起動なら入力をそのまま使う。
+      - name: 実行する処理を決める
+        id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "job=${{ inputs.job }}" >> "$GITHUB_OUTPUT"
+            echo "date=${{ inputs.date }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          hour=$(TZ=Asia/Tokyo date +%H)
+          if [ "$hour" -ge 5 ] && [ "$hour" -lt 9 ]; then
+            echo "job=refresh" >> "$GITHUB_OUTPUT"
+          elif [ "$hour" -ge 12 ] && [ "$hour" -lt 22 ]; then
+            echo "job=tenji" >> "$GITHUB_OUTPUT"
+          else
+            echo "job=review" >> "$GITHUB_OUTPUT"
+          fi
+          echo "date=" >> "$GITHUB_OUTPUT"
+
+      # 番組表と競走成績は LZH で配られる。Windows では標準の bsdtar を使うが、
+      # Linux には無いので lhasa を入れる（`tools/suminoe-read/suminoe/extractor.py`）。
+      - name: LZH 解凍器を入れる
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lhasa
+
+      - name: 依存関係を入れる
+        run: |
+          npm ci --prefix apps/suminoe-log
+          npm ci --prefix tools/suminoe-mcp
+          python -m pip install --quiet --upgrade pip
+          if [ -f tools/suminoe-read/requirements.txt ]; then
+            python -m pip install --quiet -r tools/suminoe-read/requirements.txt
+          fi
+
+      - name: 収集する
+        id: collect
+        env:
+          TARGET_DATE: ${{ steps.pick.outputs.date }}
+          JOB: ${{ steps.pick.outputs.job }}
+        run: bash .github/scripts/collect.sh
+
+      # 中身が変わったときだけデプロイする。
+      # 変わっていないのにデプロイすると、無料枠の実行時間を無駄に食う。
+      - name: 変化があるか見る
+        id: diff
+        run: |
+          if git diff --quiet -- apps/suminoe-log/public; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "変化なし。デプロイしません。"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- apps/suminoe-log/public
+          fi
+
+      - name: Vercel にデプロイする
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx --yes vercel@latest deploy --prod --yes \
+            --token "${{ secrets.VERCEL_TOKEN }}" \
+            --cwd apps/suminoe-log
+
+      # 集めたデータをリポジトリにも残す。
+      # **オッズは過去に遡って取れない。** デプロイだけだと履歴が残らないので、
+      # 後から検証できるようにコミットする。
+      - name: 集めたデータをコミットする
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/suminoe-log/public tools/suminoe-read/output || true
+          if git diff --cached --quiet; then
+            echo "コミットするものがありません。"
+          else
+            git commit -m "data: $(TZ=Asia/Tokyo date +%F) の${{ steps.pick.outputs.job }}を取り込む"
+            git push
+          fi

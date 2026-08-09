@@ -3,9 +3,9 @@
   "permissions": {
     "defaultMode": "auto",
     "allow": [
-      "Read(//c/Users/matto/Claude/suminoe_kyouteiApp/**)",
-      "Edit(//c/Users/matto/Claude/suminoe_kyouteiApp/**)",
-      "Write(//c/Users/matto/Claude/suminoe_kyouteiApp/**)",
+      "Read(./**)",
+      "Edit(./**)",
+      "Write(./**)",
 
       "Bash(node *)",
       "Bash(npm *)",

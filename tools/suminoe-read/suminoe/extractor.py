@@ -4,10 +4,14 @@
 
 1. Windows 11 標準の bsdtar (`C:\\Windows\\System32\\tar.exe`) — 実機で成功を確認済み
 2. 7-Zip CLI (`7z.exe`)
-3. Python `lhafile` パッケージ
-4. 全滅 → 明確なエラーで手動解凍の導線を案内（例外を握りつぶさない）
+3. lhasa (`lha`) — Linux 用。CI（ubuntu）はこれを使う
+4. Python `lhafile` パッケージ
+5. 全滅 → 明確なエラーで手動解凍の導線を案内（例外を握りつぶさない）
 
 Git Bash の GNU tar は LZH 非対応。**必ずフルパスで System32 の tar.exe を呼ぶ。**
+
+**Windows 前提で書かないこと。** GitHub Actions（ubuntu）でも同じコードが動く。
+1 と 2 は Linux に無いので、そこで止まらず 3 に落ちること。
 """
 
 from __future__ import annotations
@@ -117,6 +121,19 @@ def extract_lzh(lzh_path: Path, dest_dir: Path, log=print) -> Path:
         attempts.append(err or f"7-Zip は成功したが {lzh_path.stem.upper()}.TXT が見つからない")
     else:
         attempts.append("7-Zip が見つからない")
+
+    # lhasa。Debian/Ubuntu の `lhasa` パッケージが入れる LZH 解凍器。
+    # Windows には無いので、PATH に見つかったときだけ試す。
+    lha = _find_executable((), "lha")
+    if lha:
+        log(f"  解凍: lha ({lha}) を試行")
+        ok, err = _run([str(lha), "-e", str(lzh_path.resolve())], cwd=dest_dir)
+        if ok and (txt := _extracted_txt(dest_dir, lzh_path)):
+            log(f"  解凍成功: {txt.name}")
+            return txt
+        attempts.append(err or f"lha は成功したが {lzh_path.stem.upper()}.TXT が見つからない")
+    else:
+        attempts.append("lha (lhasa) が見つからない")
 
     try:
         import lhafile  # type: ignore[import-not-found]
