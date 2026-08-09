@@ -104,12 +104,53 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+/**
+ * その日のうちに中身が変わるデータ。**キャッシュ優先にしてはいけない。**
+ *
+ * アプリの骨格（HTML/JS/CSS）はファイル名にハッシュが付くのでキャッシュ優先で正しいが、
+ * これらは名前が変わらないまま中身だけが差し替わる。キャッシュ優先だと端末は
+ * 最初に読んだ版を永久に返し続け、締切前にオッズが動いても画面が変わらない。
+ * （2026-08-09 の現地でこれを踏んだ。サーバーは最新、端末だけが 4 時間前のオッズだった）
+ */
+const LIVE_DATA = /^\\/(racecard|odds|tenji|results|calibration)\\.json$|^\\/archive\\//;
+
+/** 回線待ちの上限。競艇場は回線が詰まるので、待ちすぎずキャッシュに落とす */
+const NETWORK_TIMEOUT_MS = 5000;
+
+/**
+ * 通信優先。取れたら必ず新しいものを返し、取れなければ前回の内容を返す。
+ * 途中の proxy に古い版を掴まれないよう no-store で要求する。
+ */
+async function liveFirst(cache, request) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+  try {
+    const fresh = await fetch(new Request(request.url, { cache: 'no-store' }), {
+      signal: controller.signal,
+    });
+    if (fresh.ok) {
+      // 次のオフラインに備えて置き換える。応答は待たせない
+      cache.put(request, fresh.clone());
+      return fresh;
+    }
+  } catch {
+    /* オフラインか時間切れ。下のキャッシュに落とす */
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const cached = await cache.match(request, { ignoreSearch: true });
+  return cached || new Response('', { status: 504, statusText: 'offline' });
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // SW 自身は横取りしない（更新の妨げになる）
+  if (url.pathname === '/sw.js') return;
 
   event.respondWith(
     (async () => {
@@ -124,6 +165,8 @@ self.addEventListener('fetch', (event) => {
           fetch(request)
         );
       }
+
+      if (LIVE_DATA.test(url.pathname)) return liveFirst(cache, request);
 
       const cached = await cache.match(request, { ignoreSearch: true });
       if (cached) return cached;
