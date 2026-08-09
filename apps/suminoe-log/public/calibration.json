@@ -1,0 +1,155 @@
+{
+ "schemaVersion": 1,
+ "generatedAt": "2026-08-08T23:57:17.419Z",
+ "days": 62,
+ "races": 743,
+ "temperature": 2,
+ "placeTemperature": 3,
+ "logLoss": 1.32,
+ "trifectaLogLoss": 4.1063,
+ "baselineLogLoss": 1.7918,
+ "favouriteHitRate": 0.533,
+ "bins": [
+  {
+   "range": [
+    0,
+    0.1
+   ],
+   "predicted": 0.0539,
+   "actual": 0.0532,
+   "n": 2332
+  },
+  {
+   "range": [
+    0.1,
+    0.2
+   ],
+   "predicted": 0.1382,
+   "actual": 0.1338,
+   "n": 1061
+  },
+  {
+   "range": [
+    0.2,
+    0.3
+   ],
+   "predicted": 0.2406,
+   "actual": 0.2597,
+   "n": 335
+  },
+  {
+   "range": [
+    0.3,
+    0.4
+   ],
+   "predicted": 0.3502,
+   "actual": 0.3681,
+   "n": 144
+  },
+  {
+   "range": [
+    0.4,
+    0.5
+   ],
+   "predicted": 0.4526,
+   "actual": 0.4621,
+   "n": 145
+  },
+  {
+   "range": [
+    0.5,
+    0.6
+   ],
+   "predicted": 0.5525,
+   "actual": 0.5355,
+   "n": 211
+  },
+  {
+   "range": [
+    0.6,
+    0.7
+   ],
+   "predicted": 0.6399,
+   "actual": 0.6875,
+   "n": 144
+  },
+  {
+   "range": [
+    0.7,
+    0.8
+   ],
+   "predicted": 0.7421,
+   "actual": 0.7,
+   "n": 70
+  },
+  {
+   "range": [
+    0.8,
+    0.9
+   ],
+   "predicted": 0.8331,
+   "actual": 0.5333,
+   "n": 15
+  },
+  {
+   "range": [
+    0.9,
+    1
+   ],
+   "predicted": 0.9157,
+   "actual": 1,
+   "n": 1
+  }
+ ],
+ "topN": [
+  {
+   "n": 6,
+   "predicted": 0.2752,
+   "hitRate": 0.2921,
+   "samples": 743
+  },
+  {
+   "n": 12,
+   "predicted": 0.4402,
+   "hitRate": 0.4684,
+   "samples": 743
+  },
+  {
+   "n": 24,
+   "predicted": 0.6386,
+   "hitRate": 0.6743,
+   "samples": 743
+  }
+ ],
+ "trifectaRatio": 1.06,
+ "simulations": [
+  {
+   "label": "3連単 上位6点",
+   "races": 743,
+   "hits": 217,
+   "hitRate": 0.2921,
+   "roi": 0.7468
+  },
+  {
+   "label": "3連単 上位12点",
+   "races": 743,
+   "hits": 348,
+   "hitRate": 0.4684,
+   "roi": 0.7571
+  },
+  {
+   "label": "3連複 上位3点",
+   "races": 740,
+   "hits": 326,
+   "hitRate": 0.4405,
+   "roi": 0.6916
+  },
+  {
+   "label": "3連複 上位5点",
+   "races": 740,
+   "hits": 454,
+   "hitRate": 0.6135,
+   "roi": 0.712
+  }
+ ]
+}

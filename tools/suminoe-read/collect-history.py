@@ -65,7 +65,12 @@ def history_path(target: date) -> Path:
 
 
 def to_payload(day) -> dict:
-    """集計に必要な情報だけを残して保存する（生データは cache/ にある）。"""
+    """集計に必要な情報だけを残して保存する（生データは cache/ にある）。
+
+    払戻（payouts）も残す。**モデルの買い目を実際に買っていたら回収率が何%だったか**を
+    過去データで測るのに要る（apps/suminoe-log/scripts/calibrate.ts）。
+    オッズは当日しか取れないが、確定配当なら成績ファイルに載っている。
+    """
     return {
         "date": day.date,
         "title": day.title,
@@ -94,6 +99,15 @@ def to_payload(day) -> dict:
                         "boatNo": e.boat_no,
                     }
                     for e in race.entries
+                ],
+                "payouts": [
+                    {
+                        "betType": p.bet_type,
+                        "combo": list(p.combo),
+                        "amount": p.amount,
+                        "popularity": p.popularity,
+                    }
+                    for p in race.payouts
                 ],
             }
             for race in day.races

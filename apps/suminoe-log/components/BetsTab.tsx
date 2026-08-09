@@ -22,6 +22,10 @@ import {
 } from '@/lib/beforeInfo';
 import { ORDERED_KEYS, buildSuggestion, formatTicket, type BetPlan } from '@/lib/betting';
 import { COURSE_FIRST_RATE } from '@/lib/baseline';
+import type { Calibration } from '@/lib/calibration';
+import { findRaceOdds, formatFetchedAt, type OddsDay } from '@/lib/odds';
+import { buildPatterns, formatPatternTicket, type BetPattern } from '@/lib/patterns';
+import { DEFAULT_TEMPERATURE, buildProbabilities } from '@/lib/probability';
 import type { CardRace, RaceCard } from '@/lib/raceCard';
 import { reviewPlans } from '@/lib/review';
 import type { ResultDay } from '@/lib/results';
@@ -41,6 +45,10 @@ interface BetsTabProps {
    * **表示だけに使う。** 買い目の評価は記録タブの手入力（tenjiFastFor）で行う
    */
   tenji: TenjiDay | null;
+  /** 公式のオッズ。30分おきに更新されるので、表示には取得時刻を必ず添える */
+  odds: OddsDay | null;
+  /** 確率モデルの較正結果。期待値の数字に必ず添える */
+  calibration: Calibration | null;
   /** 記録タブで選んでいるレース番号。切り替わったらこちらも追従する */
   focusRaceNo: number;
   /** そのレースで「展示が速い」と見た艇を返す（現地の直前情報） */
@@ -58,6 +66,8 @@ export function BetsTab({
   resultCount,
   results,
   tenji,
+  odds,
+  calibration,
   focusRaceNo,
   tenjiFastFor,
   onImport,
@@ -108,6 +118,26 @@ export function BetsTab({
     () => (race && card ? findTenjiRace(tenji, race.raceNo, card.date) : null),
     [tenji, race, card],
   );
+
+  /** そのレースのオッズ。日付が違う・発売前なら null */
+  const raceOdds = useMemo(
+    () => (race && card ? findRaceOdds(odds, race.raceNo, card.date) : null),
+    [odds, race, card],
+  );
+
+  /**
+   * 買い方の3パターン。確率は較正で決めた温度で作る。
+   * **期待値はモデルが正しい前提の数字**なので、較正の注記と必ずセットで出す。
+   */
+  const patterns = useMemo(() => {
+    if (!suggestion) return [];
+    const probability = buildProbabilities(
+      suggestion.scores,
+      calibration?.temperature ?? DEFAULT_TEMPERATURE,
+      calibration?.placeTemperature ?? DEFAULT_TEMPERATURE,
+    );
+    return buildPatterns(suggestion, probability, raceOdds);
+  }, [suggestion, calibration, raceOdds]);
 
   /** 結果が確定しているレース番号（選択ボタンに印を出す） */
   const finishedRaceNos = useMemo(() => {
@@ -345,6 +375,24 @@ export function BetsTab({
         </section>
       ) : null}
 
+      {/* このレースの買い方（3パターン） */}
+      {patterns.length > 0 ? (
+        <section className="space-y-2">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-base font-bold text-text-main">このレースの買い方</h2>
+            <span className="ml-auto text-[11px] text-text-mute">
+              {raceOdds
+                ? `オッズ ${formatFetchedAt(raceOdds.fetchedAt) ?? '—'} 時点`
+                : 'オッズ未取得'}
+            </span>
+          </div>
+          {patterns.map((pattern) => (
+            <PatternCard key={pattern.key} pattern={pattern} />
+          ))}
+          <CalibrationNote calibration={calibration} hasOdds={raceOdds !== null} />
+        </section>
+      ) : null}
+
       {/* 賭式ごとの買い目 */}
       {suggestion ? (
         <div className="space-y-3">
@@ -512,6 +560,148 @@ function RaceCardTable({
         基準の1コース1着率は {COURSE_FIRST_RATE[1]}%。
       </p>
     </section>
+  );
+}
+
+/** 期待値がこれ以上なら「モデル上は割に合う」 */
+const BREAK_EVEN = 1;
+
+function PatternCard({ pattern }: { pattern: BetPattern }) {
+  const worthwhile = pattern.expectedValue !== null && pattern.expectedValue >= BREAK_EVEN;
+  const empty = pattern.points === 0;
+
+  return (
+    <section
+      className={[
+        'rounded-xl border p-3',
+        empty
+          ? 'border-line bg-bg-panel/60'
+          : worthwhile
+            ? 'border-accent bg-bg-panel'
+            : 'border-line bg-bg-panel',
+      ].join(' ')}
+    >
+      <div className="flex items-baseline gap-2">
+        <h3 className="text-base font-black text-text-main">{pattern.label}</h3>
+        {empty ? null : (
+          <span className="text-xs text-text-mute">
+            {pattern.betTypeName} {pattern.points}点
+          </span>
+        )}
+        {empty ? null : (
+          <span className="tnum ml-auto text-xs text-text-mute">
+            的中率 {(pattern.hitProbability * 100).toFixed(1)}%
+          </span>
+        )}
+      </div>
+
+      {empty ? null : (
+        <ul className="mt-2 flex flex-wrap gap-1.5">
+          {pattern.tickets.map((ticket) => (
+            <li
+              key={ticket.boats.join('-')}
+              className="tnum rounded border border-line bg-bg-raised px-2 py-1 text-sm font-bold text-text-main"
+            >
+              {formatPatternTicket(ticket, pattern.ordered)}
+              {ticket.odds !== null ? (
+                <span className="ml-1.5 text-[10px] font-normal text-text-mute">
+                  {ticket.odds.toFixed(1)}倍
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {pattern.expectedValue !== null ? (
+        <p className="tnum mt-2 text-sm">
+          <span className="text-text-mute">回収率の見立て </span>
+          <strong className={worthwhile ? 'text-accent' : 'text-text-main'}>
+            {Math.round(pattern.expectedValue * 100)}%
+          </strong>
+          <span className="text-[11px] text-text-mute">
+            （1点100円 × {pattern.points}点 に対して）
+          </span>
+        </p>
+      ) : null}
+
+      {pattern.edgeRatio !== null && pattern.points > 0 ? (
+        <p className="tnum mt-1 text-[11px] text-text-mute">
+          この{pattern.points}点をモデルは市場の{' '}
+          <strong className="text-text-main">{pattern.edgeRatio.toFixed(2)}倍</strong> と見ています
+          {pattern.edgeRatio > 1.33
+            ? '。回収率100%超はこの食い違いから出ています'
+            : pattern.edgeRatio < 0.9
+              ? '（市場より控えめ）'
+              : '（市場とほぼ同じ）'}
+        </p>
+      ) : null}
+
+      <p className="mt-1 text-[11px] text-text-mute">{pattern.reason}</p>
+      {pattern.caution ? (
+        <p className="mt-1 text-[11px] text-accent">※ {pattern.caution}</p>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * 期待値の数字に必ず添える注記。
+ *
+ * **モデルがどれだけ当たっていないかを出すためのもの。**
+ * これを省くと「回収率150%」だけが独り歩きする。
+ */
+function CalibrationNote({
+  calibration,
+  hasOdds,
+}: {
+  calibration: Calibration | null;
+  hasOdds: boolean;
+}) {
+  if (!calibration) {
+    return (
+      <p className="rounded-lg border border-line bg-bg-raised p-2 text-[11px] text-text-mute">
+        確率の検証データがまだありません。的中率は目安として見てください。
+      </p>
+    );
+  }
+
+  const ratio = calibration.trifectaRatio;
+  const best = calibration.simulations.reduce<null | (typeof calibration.simulations)[number]>(
+    (top, entry) => (top === null || entry.roi > top.roi ? entry : top),
+    null,
+  );
+
+  return (
+    <div className="space-y-1 rounded-lg border border-line bg-bg-raised p-2 text-[11px] text-text-mute">
+      <p>
+        確率は過去 <strong className="text-text-main">{calibration.races}レース</strong>
+        （{calibration.days}開催日）で検証したモデルの見立てです。1着の予測は実測とほぼ一致し、
+        3連単は
+        <strong className="text-text-main">
+          実際の的中が予測の {ratio.toFixed(2)} 倍
+        </strong>
+        （{ratio >= 1 ? 'モデルはやや控えめ' : `モデルが ${Math.round((1 - ratio) * 100)}%ぶん強気`}
+        ）でした。
+      </p>
+      {hasOdds ? (
+        <p>
+          回収率の見立ては「モデルの確率 × いまのオッズ」です。
+          <strong className="text-text-main">100%を超えても儲かる保証はありません。</strong>
+          期待値が高く出る買い目は、モデルと市場の評価が最も食い違っているところで、
+          モデル側が誤っている可能性も同じだけあります。
+        </p>
+      ) : null}
+      {best ? (
+        <p>
+          参考: 同じ期間に<strong className="text-text-main">確率の高い順</strong>で買っていた場合、
+          最も成績が良かったのは「{best.label}」で
+          <strong className="text-text-main">回収率 {Math.round(best.roi * 100)}%</strong>
+          （的中 {best.hits}/{best.races}）。控除率25%があるため、
+          長く買えば平均して減ります。
+        </p>
+      ) : null}
+    </div>
   );
 }
 

@@ -34,6 +34,8 @@ import { toCsv, toPlainText } from '@/lib/exporters';
 import { fetchBundledCard, parseRaceCard, type RaceCard } from '@/lib/raceCard';
 import { formatDateLabel, todayIso } from '@/lib/raceDate';
 import { fetchArchiveTenji, fetchBeforeInfo, type TenjiDay } from '@/lib/beforeInfo';
+import { fetchCalibration, type Calibration } from '@/lib/calibration';
+import { fetchArchiveOdds, fetchOddsDay, type OddsDay } from '@/lib/odds';
 import { fetchResults, type ResultDay } from '@/lib/results';
 import { formatMinutesLeft, isUrgent, minutesUntil, resolveSchedule } from '@/lib/schedule';
 import { tallyDay } from '@/lib/tally';
@@ -66,6 +68,10 @@ export default function Page() {
   const [results, setResults] = useState<ResultDay | null>(null);
   /** 公式の直前情報。締切の10〜15分前にレースごとに入る */
   const [tenji, setTenji] = useState<TenjiDay | null>(null);
+  /** 公式のオッズ。30分おきに更新される */
+  const [odds, setOdds] = useState<OddsDay | null>(null);
+  /** 確率モデルの較正結果。期待値の注記に使う */
+  const [calibration, setCalibration] = useState<Calibration | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   /** 締切までの残り時間を出すための現在時刻。1分ごとに進める */
   const [now, setNow] = useState<Date | null>(null);
@@ -83,6 +89,7 @@ export default function Page() {
     card: RaceCard | null;
     results: ResultDay | null;
     tenji: TenjiDay | null;
+    odds: OddsDay | null;
     logs: RaceLog[];
   } | null>(null);
   const [dayPickerOpen, setDayPickerOpen] = useState(false);
@@ -167,19 +174,33 @@ export default function Page() {
     void fetchBeforeInfo().then((fetched) => {
       if (fetched) setTenji(fetched);
     });
+
+    /** オッズ。発売前は空で返る */
+    void fetchOddsDay().then((fetched) => {
+      if (fetched) setOdds(fetched);
+    });
+
+    /** 確率モデルの較正結果。期待値の数字に必ず添えるので、無ければ期待値も控えめに出す */
+    void fetchCalibration().then((fetched) => {
+      if (fetched) setCalibration(fetched);
+    });
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   /**
-   * 開いている間だけ、直前情報を5分おきに取り直す。
+   * 開いている間だけ、直前情報とオッズを5分おきに取り直す。
    *
    * リード側は30分おきに書き出すが、締切前の1回でも新しいほうが役に立つ。
    * 取れなければ前の内容を残す（オフラインで表示が消えないように）。
+   * 較正は当日変わらないので取り直さない。
    */
   useEffect(() => {
     const timer = window.setInterval(() => {
       void fetchBeforeInfo().then((fetched) => {
         if (fetched) setTenji(fetched);
+      });
+      void fetchOddsDay().then((fetched) => {
+        if (fetched) setOdds(fetched);
       });
     }, 300_000);
     return () => window.clearInterval(timer);
@@ -320,12 +341,13 @@ export default function Page() {
         return;
       }
       const stored = loadLogs(date);
-      const [{ card, results }, pastTenji] = await Promise.all([
+      const [{ card, results }, pastTenji, pastOdds] = await Promise.all([
         fetchArchiveDay(date),
         fetchArchiveTenji(date),
+        fetchArchiveOdds(date),
       ]);
       setViewDate(date);
-      setArchiveView({ card, results, tenji: pastTenji, logs: stored.logs });
+      setArchiveView({ card, results, tenji: pastTenji, odds: pastOdds, logs: stored.logs });
       setArchiveNotice(
         card === null
           ? 'この日の出走表・結果は取得できませんでした。オンラインで開くと見られます。'
@@ -345,6 +367,7 @@ export default function Page() {
   const activeCard = viewing ? (archiveView?.card ?? null) : raceCard;
   const activeResults = viewing ? (archiveView?.results ?? null) : results;
   const activeTenji = viewing ? (archiveView?.tenji ?? null) : tenji;
+  const activeOdds = viewing ? (archiveView?.odds ?? null) : odds;
 
   const stats = useMemo(() => aggregate(activeLogs), [activeLogs]);
   const exportText = useMemo(() => toPlainText(activeLogs, activeDate), [activeLogs, activeDate]);
@@ -506,6 +529,8 @@ export default function Page() {
             resultCount={stats.resultCount}
             results={activeResults}
             tenji={activeTenji}
+            odds={activeOdds}
+            calibration={calibration}
             focusRaceNo={form.raceNo}
             tenjiFastFor={tenjiFastFor}
             onImport={handleImportCard}
