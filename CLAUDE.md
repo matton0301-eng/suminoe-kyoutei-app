@@ -276,6 +276,7 @@ TypeScript のスクリプトは MCP の tsx を借りて動かす（アプリ�
 ```bash
 # リポジトリのルートから
 ./tools/suminoe-mcp/node_modules/.bin/tsx tools/suminoe-mcp/scripts/fetch-odds.ts   # オッズ → public/odds.json
+./tools/suminoe-mcp/node_modules/.bin/tsx tools/suminoe-mcp/scripts/build-closing-odds.ts  # 締切直前のオッズ → archive/
 ./tools/suminoe-mcp/node_modules/.bin/tsx apps/suminoe-log/scripts/calibrate.ts     # 較正 → public/calibration.json
 ./tools/suminoe-mcp/node_modules/.bin/tsx apps/suminoe-log/scripts/preview-patterns.ts  # 全12Rの買い方を一覧
 ```
@@ -294,6 +295,15 @@ python collect-history.py --days 150   # cache/history/ に蓄積（1.5秒間隔
 - 実測の混ぜ方は `suminoe/enrich.py`。`Racer.history_shoritsu` に入れるだけなので
   判定ロジック（analyzer）は触らない設計
 - **判定は番組表の値で行い、実測は判断材料として併記する**。二重に効かせて過学習させない
+
+**オッズは過去に遡って取れない。** 取れたときに必ず残す。
+
+- 15分おきのスナップショット → `cache/odds/<日付>/<HHMM>.json`（git 管理外）
+- そこから**締切以前の最後の1枚**を抜き出して `public/archive/closing-odds-<日付>.json` に置く。
+  夜の照合タスク（全レース終了後）が作る
+- **締切を過ぎた後のオッズは使わない。** 買う時点では見えていないので後知恵になる
+- これが貯まると「その買い方で買っていたらどうだったか」を過去に遡って測れる。
+  8/9 に期待値順と確率順のどちらがマシか判定できなかったのは、これが無かったため
 
 ## テストの方針
 
@@ -318,9 +328,16 @@ python collect-history.py --days 150   # cache/history/ に蓄積（1.5秒間隔
 - [x] 8/7: 明るいテーマ＋ナイター切替、波しぶきと艇のシルエット、日付固定の撤去
 - [x] 8/9: 直前情報の取得と表示（展示タイム・チルト・部品交換・スタート展示・水面気象）。
       公式成績の展示タイム72件と突き合わせて一致を確認。`Suminoe-Tenji-0809` を登録・本番デプロイ済み
-- [ ] 8/8: Android 実機で機内モード検証（仕様 01 §8 のQAチェックリスト）
-- [ ] 8/7 夜: 照合タスクが走り、今日の結果がアプリに入る（動作確認になる）
-- [ ] 8/9 朝: 番組表の取得タスク / 8/9 夜: 照合タスク（要: PCが起動していること）
+- [x] 8/9: **現地観戦。全12レースを実運用した。** ここで出た不具合と気づきが以下
+- [x] 8/9: SW が当日変わるデータをキャッシュ優先で返していたのを修正（端末だけ数時間古かった）
+- [x] 8/9: 直前情報とオッズの取得を30分→15分間隔に（締切時点で平均9分前のオッズになった）
+- [x] 8/10: 見（ケン）が次のレースに波及する不具合を修正。レース移動で中身を持ち越さない
+- [x] 8/10: 「勝負」を期待値順から確率順に戻す（期待値順は未検証だった）。「堅実」にも乖離の上限
+- [x] 8/10: 当たっても損な点に印／金額を 1〜30 × 百千万／オッズ専用タブ／型ごとの実測表示
+- [x] 8/10: 締切直前のオッズを archive に残す（`closing-odds-*.json`）
+- [ ] クラウド移行（設計は `docs/superpowers/specs/2026-08-10-cloud-accumulation-design.md`）。
+      **アカウント作成とトークン登録がユーザー作業として必要なため未着手**
+- [ ] Android 実機で機内モード検証（仕様 01 §8 のQAチェックリスト）
 
 ## しきい値を触るときの注意
 
