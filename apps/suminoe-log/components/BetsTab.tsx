@@ -23,7 +23,7 @@ import {
 import { formatYen, type Bet } from '@/lib/bets';
 import { ORDERED_KEYS, buildSuggestion, formatTicket, type BetPlan } from '@/lib/betting';
 import { COURSE_FIRST_RATE } from '@/lib/baseline';
-import type { Calibration } from '@/lib/calibration';
+import { findSimulation, type Calibration } from '@/lib/calibration';
 import { findRaceOdds, formatFetchedAt, type OddsDay } from '@/lib/odds';
 import {
   buildPatterns,
@@ -478,6 +478,7 @@ export function BetsTab({
               key={pattern.key}
               pattern={pattern}
               unitYen={unitYen}
+              calibration={calibration}
               onBuy={
                 onBuy && !readOnly
                   ? () =>
@@ -673,16 +674,20 @@ const BREAK_EVEN = 1;
 function PatternCard({
   pattern,
   unitYen,
+  calibration,
   onBuy,
 }: {
   pattern: BetPattern;
   unitYen: number;
+  /** 過去の実測を添えるために使う。無ければ実績行を出さない */
+  calibration: Calibration | null;
   onBuy?: () => void;
 }) {
   const worthwhile = pattern.expectedValue !== null && pattern.expectedValue >= BREAK_EVEN;
   const empty = pattern.points === 0;
   const heat = heatOf(pattern.hitProbability, pattern.betTypeName);
   const deadPoints = pattern.tickets.filter((ticket) => losesOnHit(ticket, pattern.points)).length;
+  const track = findSimulation(calibration, pattern.betTypeName, pattern.points);
 
   return (
     <section
@@ -759,6 +764,21 @@ function PatternCard({
           })}
         </ul>
       )}
+
+      {/*
+        この型の実測。**「今日は当たらない」が異常なのか想定内なのかを、その場で判断できるようにする。**
+        8/9 の現地で堅実が5レース連続で外れたとき、この数字が画面に無かったので
+        「壊れているのか、ただのブレなのか」を私が計算し直すまで答えられなかった。
+      */}
+      {track ? (
+        <p className="tnum mt-1.5 border-l-2 border-line pl-2 text-[11px] text-text-mute">
+          この型で過去 <strong className="text-text-main">{track.races}レース</strong> 買った実測は
+          <strong className="text-text-main"> 的中率 {Math.round(track.hitRate * 100)}%</strong>
+          {' / '}
+          <strong className="text-text-main">回収率 {Math.round(track.roi * 100)}%</strong>
+          。（確率の高い順に{pattern.points}点で買った場合。控除率25%ぶんは必ず削られます）
+        </p>
+      ) : null}
 
       {/* 点数ぶんを取り戻せない点があるなら、買う前に言う */}
       {deadPoints > 0 ? (

@@ -23,6 +23,7 @@ PYTHON="$HERE/venv/Scripts/python.exe"
 #: 確定オッズの取得（レース後にしか取れないので、成績が確定した回に必ず残す）
 TSX="$HERE/../suminoe-mcp/node_modules/.bin/tsx"
 ODDS_SCRIPT="$HERE/../suminoe-mcp/scripts/fetch-odds.ts"
+CLOSING_SCRIPT="$HERE/../suminoe-mcp/scripts/build-closing-odds.ts"
 
 TARGET_DATE="${1:-$(date +%Y-%m-%d)}"
 
@@ -89,6 +90,16 @@ if [[ -x "$TSX" ]]; then
     log "  確定オッズを保存しました。"
   else
     log "  確定オッズは取得できませんでした（終了コード $?）。照合は続けます。"
+  fi
+
+  # 締切直前のオッズを1本にまとめる。
+  # 全レースが終わったこの時点でしか完成しないので、ここで作る。
+  # これが無いと「その買い方で買っていたらどうだったか」を後から測れない。
+  log "締切直前のオッズをまとめます..."
+  if "$TSX" "$CLOSING_SCRIPT" --date "$TARGET_DATE" >>"$LOG_FILE" 2>&1; then
+    log "  締切直前のオッズを保存しました。"
+  else
+    log "  締切直前のオッズはまとめられませんでした（終了コード $?）。照合は続けます。"
   fi
 else
   log "確定オッズ: tsx が見つからないため飛ばしました（$TSX）"

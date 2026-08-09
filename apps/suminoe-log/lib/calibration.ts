@@ -38,6 +38,28 @@ export interface Calibration {
   simulations: CalibrationSimulation[];
 }
 
+/**
+ * その買い方の実測を取り出す。
+ *
+ * `simulations` のラベルは「3連複 上位3点」「3連単 上位6点」のように
+ * **賭式と点数**で決まっている。買い目カードの型と同じ形なら、その実績を添えられる。
+ *
+ * **完全に同じ買い方ではない。** シミュレーションは確率上位をそのまま買った場合で、
+ * 画面の型は市場との乖離が大きい点を除いてある。近いが同一ではないので、
+ * 表示側で「確率の高い順に買った場合」と断ること。
+ *
+ * 該当が無ければ null を返す。無い型（穴）に、それらしい数字を当てはめない。
+ */
+export function findSimulation(
+  calibration: Calibration | null,
+  betTypeName: string,
+  points: number,
+): CalibrationSimulation | null {
+  if (!calibration) return null;
+  const label = `${betTypeName} 上位${points}点`;
+  return calibration.simulations.find((entry) => entry.label === label) ?? null;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
