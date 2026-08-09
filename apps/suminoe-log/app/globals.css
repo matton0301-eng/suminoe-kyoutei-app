@@ -182,20 +182,43 @@ body {
 /**
  * 最上位だけ虹。ここぞという1点にしか出ない。
  *
- * **動かさない。** background-position のアニメーションは毎フレーム描き直しになり、
+ * **動かすが、background-position は使わない。** あれは毎フレーム描き直しになり、
  * ナイター4時間の電池に響く（水面の演出で実測して分かっている）。
- * 静止していても虹は十分目立つ。
+ * 中身を1枚の帯にして `transform` で流す。GPU 合成なので再描画が起きない。
  */
 .heat-5 {
-  background: linear-gradient(
+  position: absolute;
+  overflow: hidden;
+  background: #ff2d55;
+}
+
+.heat-5::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: -100%;
+  height: 300%;
+  background: repeating-linear-gradient(
     180deg,
     #ff2d55 0%,
-    #ff9500 20%,
-    #ffd60a 40%,
-    #34c759 60%,
-    #0a84ff 80%,
-    #bf5af2 100%
+    #ff9500 3%,
+    #ffd60a 6%,
+    #34c759 9%,
+    #0a84ff 12%,
+    #bf5af2 15%,
+    #ff2d55 18%
   );
+  animation: heat-rainbow-slide 1.8s linear infinite;
+  will-change: transform;
+}
+
+@keyframes heat-rainbow-slide {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(6%);
+  }
 }
 
 /** 期待度の文字色 */
@@ -204,12 +227,36 @@ body {
 .heat-text-3 { color: var(--heat-3); }
 .heat-text-4 { color: var(--heat-4); }
 
+/**
+ * 虹の文字。ここだけは background-position で動かす。
+ * 文字数が少ない（「大当たり濃厚」6文字）ので、塗り直す面積が知れている。
+ */
 .heat-text-5 {
-  background: linear-gradient(90deg, #ff2d55, #ff9500, #ffd60a, #34c759, #0a84ff, #bf5af2);
+  background: linear-gradient(
+    90deg,
+    #ff2d55,
+    #ff9500,
+    #ffd60a,
+    #34c759,
+    #0a84ff,
+    #bf5af2,
+    #ff2d55
+  );
+  background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   font-weight: 900;
+  animation: heat-text-shift 2s linear infinite;
+}
+
+@keyframes heat-text-shift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
 }
 
 /** キーボード操作のフォーカスリングは消さない */
@@ -221,6 +268,93 @@ body {
 textarea,
 input[type='text'] {
   -webkit-tap-highlight-color: initial;
+}
+
+/**
+ * 締切が近いレース。**枠だけを明滅させる。**
+ * 背景や文字を点滅させると、現地の斜め見で数字が読めなくなる。
+ */
+.deadline-soon {
+  animation: deadline-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes deadline-pulse {
+  from {
+    box-shadow: inset 0 0 0 2px var(--tone-accent);
+  }
+  to {
+    box-shadow: inset 0 0 0 2px transparent;
+  }
+}
+
+/**
+ * 的中の演出。画面を覆って一度だけ流す。
+ * `prefers-reduced-motion` では下の指定でアニメーションが止まり、静止した虹が出る。
+ */
+.hit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--surface-deep) 82%, transparent);
+  animation: hit-fade 2.6s ease-out forwards;
+  pointer-events: none;
+}
+
+.hit-burst {
+  position: absolute;
+  inset: -20%;
+  background: conic-gradient(
+    from 0deg,
+    #ff2d55,
+    #ff9500,
+    #ffd60a,
+    #34c759,
+    #0a84ff,
+    #bf5af2,
+    #ff2d55
+  );
+  opacity: 0.28;
+  animation: hit-spin 2.6s linear forwards;
+  will-change: transform;
+}
+
+.hit-word {
+  position: relative;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  animation: hit-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+@keyframes hit-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hit-spin {
+  from {
+    transform: rotate(0deg) scale(1.4);
+  }
+  to {
+    transform: rotate(180deg) scale(1.4);
+  }
+}
+
+@keyframes hit-pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes toast-in {

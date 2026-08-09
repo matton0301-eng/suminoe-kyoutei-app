@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#061A1F',
+  themeColor: '#14110D',
   width: 'device-width',
   initialScale: 1,
   // 誤操作でズームすると片手操作しづらくなるため、拡大は許可しつつ初期倍率を固定する

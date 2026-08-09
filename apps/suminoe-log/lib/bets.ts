@@ -179,3 +179,50 @@ export function formatBet(bet: Bet): string {
 export function formatYen(yen: number): string {
   return `${yen < 0 ? '−' : ''}${Math.abs(yen).toLocaleString('ja-JP')}円`;
 }
+
+/**
+ * 自分が入力した着順だけで的中を判定する。
+ *
+ * 公式の払戻はレース後にしか来ないので、現地では**金額が分からないうちに
+ * 当たったことだけ分かる**。祝う演出はこれで出し、金額は結果が確定してから入れる。
+ *
+ * 2着・3着が未入力なら、その情報で判定できる賭式だけを見る
+ * （単勝は1着だけ、2連単は2着まで分かれば足りる）。
+ */
+export function hitsByOrder(
+  bets: Bet[],
+  order: (Boat | null)[],
+): Bet[] {
+  const [first, second, third] = order;
+  if (first === null || first === undefined) return [];
+
+  return bets.filter((bet) => {
+    switch (bet.betType) {
+      case 'win':
+        return bet.combo[0] === first;
+      case 'place':
+        // 複勝は2着以内。2着が未入力なら1着だけで判定する
+        return bet.combo[0] === first || (second != null && bet.combo[0] === second);
+      case 'exacta':
+        return second != null && isSameCombo('exacta', bet.combo, [first, second]);
+      case 'quinella':
+        return second != null && isSameCombo('quinella', bet.combo, [first, second]);
+      case 'wide': {
+        // 3着以内の2艇。3着まで入っていないと判定できない
+        if (second == null || third == null) return false;
+        const top3 = [first, second, third];
+        return bet.combo.every((boat) => top3.includes(boat));
+      }
+      case 'trifecta':
+        return (
+          second != null && third != null && isSameCombo('trifecta', bet.combo, [first, second, third])
+        );
+      case 'trio':
+        return (
+          second != null && third != null && isSameCombo('trio', bet.combo, [first, second, third])
+        );
+      default:
+        return false;
+    }
+  });
+}

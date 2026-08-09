@@ -110,7 +110,7 @@ export function RecordTab({
         </div>
       ) : null}
 
-      {/* ① レース番号 — 画面の主役。水面に映り込ませる */}
+      {/* ① レース番号 — 画面の主役 */}
       <section className="overflow-hidden rounded-xl border border-line bg-bg-panel px-2 pt-3">
         <div className="flex items-center justify-between gap-3">
           <button
@@ -144,8 +144,12 @@ export function RecordTab({
           </button>
         </div>
 
+        {/*
+          以前は鏡面反射の像が下に伸びていたので、負のマージンで詰めていた。
+          鏡面を外した今そのままにすると、レース番号にレース名が食い込む。
+        */}
         {race ? (
-          <div className="-mt-3 pb-3 text-center">
+          <div className="mt-2 pb-3 text-center">
             <p className="text-xs text-text-mute">
               {race.name || 'レース'}
               <span className="mx-1.5 text-line">|</span>

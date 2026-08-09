@@ -12,6 +12,7 @@ import { describe, it } from 'vitest';
 import { UNIT_YEN } from './review';
 import {
   betKey,
+  hitsByOrder,
   investedYen,
   isSameCombo,
   settleRace,
@@ -219,5 +220,35 @@ describe('betKey', () => {
     assert.equal(betKey(bet('trio', [1, 4, 6])), betKey(bet('trio', [6, 4, 1])));
     assert.notEqual(betKey(bet('trifecta', [1, 4, 6])), betKey(bet('trifecta', [1, 6, 4])));
     assert.notEqual(betKey(bet('trio', [1, 4, 6])), betKey(bet('trifecta', [1, 4, 6])));
+  });
+});
+
+describe('hitsByOrder（払戻を待たずに的中を判定する）', () => {
+  const order: (Boat | null)[] = [1, 4, 6];
+
+  it('3連単は着順どおりのときだけ当たり', () => {
+    assert.equal(hitsByOrder([bet('trifecta', [1, 4, 6])], order).length, 1);
+    assert.equal(hitsByOrder([bet('trifecta', [1, 6, 4])], order).length, 0);
+  });
+
+  it('3連複は順不同', () => {
+    assert.equal(hitsByOrder([bet('trio', [6, 4, 1])], order).length, 1);
+    assert.equal(hitsByOrder([bet('trio', [1, 2, 3])], order).length, 0);
+  });
+
+  it('ワイドは3着以内の2艇', () => {
+    assert.equal(hitsByOrder([bet('wide', [4, 6])], order).length, 1);
+    assert.equal(hitsByOrder([bet('wide', [1, 2])], order).length, 0);
+  });
+
+  it('2着3着が未入力でも、1着だけで分かる賭式は判定する', () => {
+    const partial: (Boat | null)[] = [1, null, null];
+    assert.equal(hitsByOrder([bet('win', [1])], partial).length, 1);
+    assert.equal(hitsByOrder([bet('place', [1])], partial).length, 1);
+    assert.equal(hitsByOrder([bet('trifecta', [1, 4, 6])], partial).length, 0, 'まだ判定できない');
+  });
+
+  it('1着が未入力なら何も当たっていないことにする', () => {
+    assert.deepEqual(hitsByOrder([bet('trifecta', [1, 4, 6])], [null, null, null]), []);
   });
 });

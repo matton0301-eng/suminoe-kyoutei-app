@@ -33,6 +33,7 @@ import {
   type Heat,
 } from '@/lib/patterns';
 import { DEFAULT_TEMPERATURE, buildProbabilities } from '@/lib/probability';
+import { minutesUntil } from '@/lib/schedule';
 import type { CardRace, RaceCard } from '@/lib/raceCard';
 import { reviewPlans } from '@/lib/review';
 import type { ResultDay } from '@/lib/results';
@@ -58,6 +59,8 @@ interface BetsTabProps {
   calibration: Calibration | null;
   /** 記録タブで選んでいるレース番号。切り替わったらこちらも追従する */
   focusRaceNo: number;
+  /** 現在時刻。締切が近いレースを目立たせるのに使う。描画前は null */
+  now: Date | null;
   onImport: (raw: string) => void;
   onClearCard: () => void;
   importError: string | null;
@@ -76,6 +79,7 @@ export function BetsTab({
   odds,
   calibration,
   focusRaceNo,
+  now,
   onImport,
   onClearCard,
   importError,
@@ -271,6 +275,10 @@ export function BetsTab({
           {card.races.map((entry) => {
             const isActive = race.raceNo === entry.raceNo;
             const heat = heatByRace.get(entry.raceNo);
+            // 締切が近いレースは枠を明滅させる。締切を過ぎたものは沈める
+            const left = now ? minutesUntil(entry.deadline, now) : null;
+            const closingSoon = left !== null && left >= 0 && left <= 10;
+            const closed = left !== null && left < 0;
             // 判定は「買うかどうか」の結論。冷たい青から熱い赤へ、そのまま温度で出す
             const verdictClass =
               entry.verdict === '勝負'
@@ -291,8 +299,15 @@ export function BetsTab({
                   'relative min-h-14 overflow-hidden border pt-1',
                   isActive ? 'border-accent bg-bg-raised' : 'border-line bg-bg-raised/40',
                   heat && heat.level >= 4 ? 'border-2' : '',
+                  closingSoon ? 'deadline-soon' : '',
+                  closed && !isActive ? 'opacity-45' : '',
                 ].join(' ')}
               >
+                {closingSoon ? (
+                  <span className="absolute inset-x-0 top-0 bg-accent py-[1px] text-[9px] font-black leading-none text-[color:var(--on-accent)]">
+                    締切{left}分
+                  </span>
+                ) : null}
                 <span
                   className={[
                     'tnum block text-base font-bold',

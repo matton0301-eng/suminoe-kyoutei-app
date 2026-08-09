@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 
 import { BetsTab } from '@/components/BetsTab';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { HitCelebration } from '@/components/HitCelebration';
 import { DayPicker } from '@/components/DayPicker';
 import { ExportTab } from '@/components/ExportTab';
 import { LogList } from '@/components/LogList';
@@ -25,7 +26,7 @@ import { TabBar, type TabKey } from '@/components/TabBar';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Toast } from '@/components/Toast';
 import { aggregate } from '@/lib/aggregate';
-import { summarizeBets, type Bet } from '@/lib/bets';
+import { hitsByOrder, summarizeBets, type Bet } from '@/lib/bets';
 import { fetchArchiveDay, fetchArchiveIndex, mergeDayEntries, type DayEntry } from '@/lib/archive';
 import type { MultiTally } from '@/lib/multiTally';
 import { loadMultiTally } from '@/lib/totalLoader';
@@ -73,6 +74,11 @@ export default function Page() {
   /** 確率モデルの較正結果。期待値の注記に使う */
   const [calibration, setCalibration] = useState<Calibration | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  /** 的中の演出。保存した瞬間に当たっていれば流す */
+  const [celebration, setCelebration] = useState<{ hits: Bet[]; token: number }>({
+    hits: [],
+    token: 0,
+  });
   /** 締切までの残り時間を出すための現在時刻。1分ごとに進める */
   const [now, setNow] = useState<Date | null>(null);
   /** 起動時の自動選択を一度だけ行うためのフラグ */
@@ -236,20 +242,40 @@ export default function Page() {
   );
 
   const commit = useCallback(() => {
+    /**
+     * 同じレースの記録があれば**上書きする**。
+     * 買い目タブの「買った」は記録を先に作るので、そのあと結果を保存したときに
+     * 新しい行を足すと 1R が2つできてしまう（実際に踏んだ）。
+     */
     const editingId = form.editingId;
-    if (editingId !== null) {
-      const next = logs.map((log) =>
-        log.id === editingId ? { ...toRaceLog(form, editingId), savedAt: log.savedAt } : log,
-      );
-      persist(next);
-      setToast(`${form.raceNo}R を修正しました`);
-      dispatch({ type: 'reset', raceNo: nextRaceNo(form.raceNo) });
-    } else {
-      const next = [...logs, toRaceLog(form, createId())];
-      persist(next);
-      setToast(`${form.raceNo}R を記録しました`);
-      dispatch({ type: 'reset', raceNo: nextRaceNo(form.raceNo) });
+    const existing =
+      editingId !== null
+        ? (logs.find((log) => log.id === editingId) ?? null)
+        : (logs.find((log) => log.raceNo === form.raceNo) ?? null);
+
+    // 買い目タブから入れた舟券はフォームに無いことがあるので、既存の記録から引き継ぐ
+    const bets = form.bets.length > 0 ? form.bets : (existing?.bets ?? []);
+
+    // 当たっていれば祝う。公式の払戻はまだ来ていないので、入力した着順だけで判定する
+    const hits = hitsByOrder(bets, [form.resultFirst, form.resultSecond, form.resultThird]);
+    if (hits.length > 0) {
+      setCelebration((current) => ({ hits, token: current.token + 1 }));
     }
+
+    const saved = {
+      ...toRaceLog(form, existing?.id ?? createId()),
+      bets,
+      ken: form.ken || (bets.length === 0 && (existing?.ken ?? false)),
+      savedAt: existing?.savedAt ?? new Date().toISOString(),
+    };
+
+    persist(
+      existing
+        ? logs.map((log) => (log.id === saved.id ? saved : log))
+        : [...logs, saved],
+    );
+    setToast(`${form.raceNo}R を${existing ? '修正' : '記録'}しました`);
+    dispatch({ type: 'reset', raceNo: nextRaceNo(form.raceNo) });
     clearDraft(raceDate);
   }, [form, logs, persist, raceDate]);
 
@@ -356,10 +382,12 @@ export default function Page() {
             },
           ];
       persist(next);
+      // 記録タブで同じレースを開いていれば、フォームにも映して一覧に出す
+      if (form.raceNo === raceNo) dispatch({ type: 'addBets', bets });
       const total = bets.reduce((sum, bet) => sum + bet.amountYen, 0);
       setToast(`${raceNo}R に ${bets.length}点（${total.toLocaleString('ja-JP')}円）を記録しました`);
     },
-    [logs, persist],
+    [logs, persist, form.raceNo],
   );
 
   /** ヘッダーの日付タップ。先にモーダルを開いてから一覧を読む(体感を軽くする) */
@@ -566,6 +594,7 @@ export default function Page() {
             tenji={activeTenji}
             odds={activeOdds}
             calibration={calibration}
+            now={now}
             onBuy={viewing ? undefined : handleBuy}
             focusRaceNo={form.raceNo}
             onImport={handleImportCard}
@@ -600,6 +629,12 @@ export default function Page() {
           />
         ) : null}
       </main>
+
+      <HitCelebration
+        hits={celebration.hits}
+        token={celebration.token}
+        onDone={() => setCelebration({ hits: [], token: 0 })}
+      />
 
       <TabBar active={tab} onChange={setTab} />
 
