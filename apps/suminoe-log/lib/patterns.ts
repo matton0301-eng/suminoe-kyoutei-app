@@ -292,22 +292,34 @@ export interface Heat {
   threshold: number;
 }
 
-const HEAT_GRADES: readonly Heat[] = [
-  { level: 5, label: '大当たり濃厚', threshold: 0.6 },
-  { level: 4, label: '超激熱', threshold: 0.45 },
-  { level: 3, label: '激熱', threshold: 0.3 },
-  { level: 2, label: '熱', threshold: 0.15 },
-  { level: 1, label: '注目', threshold: 0.08 },
-];
+const HEAT_LABELS = ['', '注目', '熱', '激熱', '超激熱', '大当たり濃厚'] as const;
 
-export function heatOf(hitProbability: number): Heat {
-  return (
-    HEAT_GRADES.find((grade) => hitProbability >= grade.threshold) ?? {
-      level: 0,
-      label: '',
-      threshold: 0,
+/**
+ * 段の切り方は賭式ごとに変える。
+ *
+ * 3連複3点は構造的に当たりやすく、実データ12レースで 27〜54% に固まる。
+ * 3連単と同じ物差しを当てると11/12レースが「激熱」以上になり、階調が死ぬ
+ * （2026-08-09 の実測で確認した）。同じ言葉でも基準の数字を必ず併記するので、
+ * 賭式で基準が違っても画面上は誤解にならない。
+ */
+const HEAT_THRESHOLDS: Record<'3連単' | '3連複', readonly number[]> = {
+  // [注目, 熱, 激熱, 超激熱, 大当たり濃厚]
+  '3連複': [0.35, 0.42, 0.48, 0.55, 0.62],
+  '3連単': [0.08, 0.13, 0.2, 0.28, 0.38],
+};
+
+export function heatOf(hitProbability: number, betTypeName: '3連単' | '3連複' = '3連複'): Heat {
+  const thresholds = HEAT_THRESHOLDS[betTypeName];
+  for (let level = thresholds.length; level >= 1; level -= 1) {
+    if (hitProbability >= thresholds[level - 1]) {
+      return {
+        level: level as HeatLevel,
+        label: HEAT_LABELS[level],
+        threshold: thresholds[level - 1],
+      };
     }
-  );
+  }
+  return { level: 0, label: '', threshold: 0 };
 }
 
 /** 3連単・3連複のキーを作る（呼び出し側で使う） */

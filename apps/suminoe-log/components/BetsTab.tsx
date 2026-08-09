@@ -24,7 +24,13 @@ import { ORDERED_KEYS, buildSuggestion, formatTicket, type BetPlan } from '@/lib
 import { COURSE_FIRST_RATE } from '@/lib/baseline';
 import type { Calibration } from '@/lib/calibration';
 import { findRaceOdds, formatFetchedAt, type OddsDay } from '@/lib/odds';
-import { buildPatterns, formatPatternTicket, heatOf, type BetPattern } from '@/lib/patterns';
+import {
+  buildPatterns,
+  formatPatternTicket,
+  heatOf,
+  type BetPattern,
+  type Heat,
+} from '@/lib/patterns';
 import { DEFAULT_TEMPERATURE, buildProbabilities } from '@/lib/probability';
 import type { CardRace, RaceCard } from '@/lib/raceCard';
 import { reviewPlans } from '@/lib/review';
@@ -136,6 +142,38 @@ export function BetsTab({
     return buildPatterns(suggestion, probability, raceOdds);
   }, [suggestion, calibration, raceOdds]);
 
+  /**
+   * 12レース分の期待度。レース一覧を「熱さの地図」にするために使う。
+   *
+   * 判定（勝負・標準・見送り）は買うかどうかの結論で、期待度は当たりやすさ。
+   * 別の軸なので、一覧では判定を文字色、期待度を下端の帯で出し分けている。
+   */
+  const heatByRace = useMemo(() => {
+    const map = new Map<number, Heat>();
+    if (!card) return map;
+    for (const entry of card.races) {
+      const entrySuggestion = buildSuggestion(entry, actualCourseRates, resultCount);
+      if (!entrySuggestion) continue;
+      const probability = buildProbabilities(
+        entrySuggestion.scores,
+        calibration?.temperature ?? DEFAULT_TEMPERATURE,
+        calibration?.placeTemperature ?? DEFAULT_TEMPERATURE,
+      );
+      const entryPatterns = buildPatterns(
+        entrySuggestion,
+        probability,
+        findRaceOdds(odds, entry.raceNo, card.date),
+      );
+      // 一覧では最も熱い型を代表させる（賭式ごとに基準が違うので段で比べる）
+      const hottest = entryPatterns.reduce<Heat>((top, pattern) => {
+        const heat = heatOf(pattern.hitProbability, pattern.betTypeName);
+        return heat.level > top.level ? heat : top;
+      }, heatOf(0));
+      map.set(entry.raceNo, hottest);
+    }
+    return map;
+  }, [card, actualCourseRates, resultCount, odds, calibration]);
+
   /** 結果が確定しているレース番号（選択ボタンに印を出す） */
   const finishedRaceNos = useMemo(() => {
     if (!results || !card || results.date !== card.date) return new Set<number>();
@@ -226,18 +264,27 @@ export function BetsTab({
         <div className="mt-2 grid grid-cols-6 gap-2">
           {card.races.map((entry) => {
             const isActive = race.raceNo === entry.raceNo;
+            const heat = heatByRace.get(entry.raceNo);
+            // 判定は「買うかどうか」の結論。冷たい青から熱い赤へ、そのまま温度で出す
+            const verdictClass =
+              entry.verdict === '勝負'
+                ? 'heat-text-3 font-black'
+                : entry.verdict === '標準'
+                  ? 'heat-text-2 font-bold'
+                  : 'heat-text-1';
             return (
               <button
                 key={entry.raceNo}
                 type="button"
                 aria-pressed={isActive}
-                aria-label={`${entry.raceNo}R ${entry.verdict ?? ''}`}
+                aria-label={`${entry.raceNo}R ${entry.verdict ?? ''}${
+                  heat && heat.level > 0 ? ` ${heat.label}` : ''
+                }`}
                 onClick={() => setSelectedRaceNo(entry.raceNo)}
                 className={[
-                  'min-h-14 rounded-lg border pt-1',
-                  isActive
-                    ? 'border-accent bg-bg-raised'
-                    : 'border-line bg-bg-raised/40',
+                  'relative min-h-14 overflow-hidden border pt-1',
+                  isActive ? 'border-accent bg-bg-raised' : 'border-line bg-bg-raised/40',
+                  heat && heat.level >= 4 ? 'border-2' : '',
                 ].join(' ')}
               >
                 <span
@@ -249,25 +296,38 @@ export function BetsTab({
                   {entry.raceNo}
                 </span>
                 <span aria-hidden className="mt-0.5 block text-[10px] leading-tight">
-                  {entry.verdict === '勝負' ? (
-                    <span className="font-bold text-accent">勝負</span>
-                  ) : entry.verdict === '見送り' ? (
-                    <span className="text-text-mute">見送</span>
-                  ) : (
-                    <span className="text-text-mute">標準</span>
-                  )}
+                  <span className={verdictClass}>
+                    {entry.verdict === '見送り' ? '見送' : (entry.verdict ?? '—')}
+                  </span>
                 </span>
                 {finishedRaceNos.has(entry.raceNo) ? (
-                  <span aria-hidden className="mx-auto mt-0.5 block h-1 w-1 rounded-full bg-accent" />
+                  <span aria-hidden className="mx-auto mt-0.5 block h-1 w-1 bg-accent" />
+                ) : null}
+                {/* 期待度の帯。判定とは別軸なので、下端に横で引いて混ざらないようにする */}
+                {heat && heat.level > 0 ? (
+                  <span
+                    aria-hidden
+                    className={`absolute inset-x-0 bottom-0 h-[3px] heat-${heat.level}`}
+                  />
                 ) : null}
               </button>
             );
           })}
         </div>
-        <p className="mt-2 text-[10px] text-text-mute">
-          勝負={card.races.filter((entry) => entry.verdict === '勝負').length}件 / 標準=
-          {card.races.filter((entry) => entry.verdict === '標準').length}件 / 見送り=
-          {card.races.filter((entry) => entry.verdict === '見送り').length}件
+        <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[10px] text-text-mute">
+          <span>
+            <span className="heat-text-3 font-black">勝負</span>
+            {card.races.filter((entry) => entry.verdict === '勝負').length}件
+          </span>
+          <span>
+            <span className="heat-text-2 font-bold">標準</span>
+            {card.races.filter((entry) => entry.verdict === '標準').length}件
+          </span>
+          <span>
+            <span className="heat-text-1">見送</span>
+            {card.races.filter((entry) => entry.verdict === '見送り').length}件
+          </span>
+          <span className="ml-auto">下の帯＝期待度（青→緑→赤→金→虹）</span>
         </p>
       </section>
 
@@ -559,7 +619,7 @@ const BREAK_EVEN = 1;
 function PatternCard({ pattern }: { pattern: BetPattern }) {
   const worthwhile = pattern.expectedValue !== null && pattern.expectedValue >= BREAK_EVEN;
   const empty = pattern.points === 0;
-  const heat = heatOf(pattern.hitProbability);
+  const heat = heatOf(pattern.hitProbability, pattern.betTypeName);
 
   return (
     <section

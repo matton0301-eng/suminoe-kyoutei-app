@@ -202,27 +202,45 @@ describe('期待値が低いとき', () => {
 });
 
 describe('期待度', () => {
-  it('的中率に応じて段が上がる', () => {
-    assert.equal(heatOf(0.05).level, 0, '低いうちは印を出さない');
-    assert.equal(heatOf(0.08).level, 1);
-    assert.equal(heatOf(0.15).level, 2);
-    assert.equal(heatOf(0.3).level, 3);
-    assert.equal(heatOf(0.45).level, 4);
-    assert.equal(heatOf(0.6).level, 5);
-    assert.equal(heatOf(0.95).level, 5, '上限は虹どまり');
+  it('3連単は的中率に応じて段が上がる', () => {
+    assert.equal(heatOf(0.05, '3連単').level, 0, '低いうちは印を出さない');
+    assert.equal(heatOf(0.08, '3連単').level, 1);
+    assert.equal(heatOf(0.13, '3連単').level, 2);
+    assert.equal(heatOf(0.2, '3連単').level, 3);
+    assert.equal(heatOf(0.28, '3連単').level, 4);
+    assert.equal(heatOf(0.38, '3連単').level, 5);
+    assert.equal(heatOf(0.95, '3連単').level, 5, '上限は虹どまり');
+  });
+
+  it('3連複は基準が高い（構造的に当たりやすいため）', () => {
+    // 同じ的中率でも、3連複なら段が下がる
+    assert.equal(heatOf(0.3, '3連複').level, 0);
+    assert.equal(heatOf(0.3, '3連単').level, 4);
+    assert.equal(heatOf(0.48, '3連複').level, 3);
+    assert.equal(heatOf(0.62, '3連複').level, 5);
+  });
+
+  it('実データの分布で階調が出る', () => {
+    // 2026-08-09 の12レース（3連複3点）の実測値。全部が同じ段に潰れないこと
+    const actual = [0.54, 0.537, 0.533, 0.47, 0.445, 0.443, 0.417, 0.395, 0.381, 0.38, 0.311, 0.27];
+    const levels = new Set(actual.map((p) => heatOf(p, '3連複').level));
+    assert.ok(levels.size >= 4, `段が ${levels.size} 種類しか出ていない`);
   });
 
   it('言葉には必ず基準の的中率がある（煽りにしないため）', () => {
     for (const p of [0.1, 0.2, 0.35, 0.5, 0.7]) {
-      const heat = heatOf(p);
-      assert.notEqual(heat.label, '');
-      assert.ok(heat.threshold > 0, `${heat.label} に基準がない`);
-      assert.ok(p >= heat.threshold, `${heat.label} の基準を満たしていない`);
+      for (const bet of ['3連単', '3連複'] as const) {
+        const heat = heatOf(p, bet);
+        if (heat.level === 0) continue;
+        assert.notEqual(heat.label, '');
+        assert.ok(heat.threshold > 0, `${heat.label} に基準がない`);
+        assert.ok(p >= heat.threshold, `${heat.label} の基準を満たしていない`);
+      }
     }
   });
 
   it('境界のすぐ下では段が上がらない', () => {
-    assert.equal(heatOf(0.299).level, 2);
-    assert.equal(heatOf(0.599).level, 4);
+    assert.equal(heatOf(0.199, '3連単').level, 2);
+    assert.equal(heatOf(0.619, '3連複').level, 4);
   });
 });
