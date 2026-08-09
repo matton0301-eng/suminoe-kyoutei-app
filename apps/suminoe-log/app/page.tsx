@@ -21,7 +21,6 @@ import { LogList } from '@/components/LogList';
 import { RecordTab } from '@/components/RecordTab';
 import { StatsTab } from '@/components/StatsTab';
 import { TallyTab } from '@/components/TallyTab';
-import { WaveScene } from '@/components/WaveScene';
 import { TabBar, type TabKey } from '@/components/TabBar';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Toast } from '@/components/Toast';
@@ -420,17 +419,6 @@ export default function Page() {
    * 買い目タブで見ているレースの「展示で速そうな艇」。
    * すでに記録済みならその値、まだならフォームの入力中の値を使う。
    */
-  const tenjiFastFor = useCallback(
-    (raceNo: number): Boat | null => {
-      // 過去日の閲覧中はその日の記録だけから引く(入力中のフォームは当日のもの)
-      const source = viewing ? (archiveView?.logs ?? []) : logs;
-      const saved = [...source].reverse().find((log) => log.raceNo === raceNo);
-      if (saved) return saved.tenjiFast;
-      if (viewing) return null;
-      return form.raceNo === raceNo ? form.tenjiFast : null;
-    },
-    [viewing, archiveView, logs, form.raceNo, form.tenjiFast],
-  );
 
   /** 買い目の補正に使う当日実測のコース別1着率 */
   const actualCourseRates = useMemo(() => {
@@ -446,15 +434,10 @@ export default function Page() {
 
   return (
     <>
-      {/*
-        ヘッダーに水面のシーンを同化させている。下部（親指の操作領域）に
-        装飾を置くと、コンテンツを断ち切るうえに一番使う場所を奪う。
-        `pb-[3.75rem]` が水面の見える高さ。**幾何は globals.css にある。**
-      */}
-      <header className="sticky top-0 z-10 overflow-hidden border-b border-line bg-bg-deep/95 pb-[3.75rem] backdrop-blur">
-        <WaveScene />
-        <div className="relative mx-auto flex max-w-lg items-center justify-between gap-2 px-4 py-2">
-          <h1 className="text-lg font-black text-text-main">スミノエ・ログ</h1>
+      {/* 新聞の題字。太罫で紙面の頭を切る */}
+      <header className="sticky top-0 z-10 border-b-[3px] border-text-main bg-bg-deep">
+        <div className="relative mx-auto flex max-w-lg items-center justify-between gap-2 px-3 py-1.5">
+          <h1 className="text-lg font-black tracking-[0.18em] text-text-main">スミノエ・ログ</h1>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -532,7 +515,6 @@ export default function Page() {
             odds={activeOdds}
             calibration={calibration}
             focusRaceNo={form.raceNo}
-            tenjiFastFor={tenjiFastFor}
             onImport={handleImportCard}
             onClearCard={handleClearCard}
             importError={importError}

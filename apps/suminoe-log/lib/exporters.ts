@@ -2,7 +2,7 @@
  * 記録の書き出し（人が読むテキスト / CSV）。
  */
 
-import { aggregate, formatRate, formatResult, isHit } from './aggregate';
+import { aggregate, formatRate, formatResult } from './aggregate';
 import { BASELINE_PERIOD } from './baseline';
 import { formatDateSlash } from './raceDate';
 import type { RaceLog } from './types';
@@ -22,7 +22,6 @@ export function toPlainText(logs: RaceLog[], date: string): string {
 
   for (const log of sortByRaceNo(logs)) {
     const parts = [
-      `予想:${log.predictedFirst ?? '—'}号艇`,
       `→ 結果:${formatResult(log)}`,
       `決まり手:${log.kimarite ?? '—'}`,
       `水面:${log.suimen ?? '—'}`,
@@ -30,7 +29,6 @@ export function toPlainText(logs: RaceLog[], date: string): string {
     lines.push(`${log.raceNo}R  ${parts.join('  ')}`);
 
     const extras: string[] = [];
-    if (log.tenjiFast !== null) extras.push(`展示速い:${log.tenjiFast}号艇`);
     if (log.memo.trim()) extras.push(`メモ:${log.memo.trim()}`);
     if (extras.length > 0) lines.push(`    ${extras.join(' / ')}`);
   }
@@ -38,7 +36,6 @@ export function toPlainText(logs: RaceLog[], date: string): string {
   const stats = aggregate(logs);
   lines.push('', '【集計】');
   lines.push(
-    `予想的中 ${stats.hitRate.hit}/${stats.hitRate.total} (${formatRate(stats.hitRate.rate)})`,
   );
 
   const course1 = stats.courses.find((course) => course.course === 1);
@@ -63,12 +60,9 @@ export function toPlainText(logs: RaceLog[], date: string): string {
 
 const CSV_HEADER = [
   'race_no',
-  'predicted_first',
-  'tenji_fast',
   'result_first',
   'result_second',
   'result_third',
-  'hit',
   'kimarite',
   'suimen',
   'memo',
@@ -90,16 +84,12 @@ function cell(value: string | number | null): string {
 export function toCsv(logs: RaceLog[]): string {
   const rows: string[] = [CSV_HEADER.join(',')];
   for (const log of sortByRaceNo(logs)) {
-    const hit = isHit(log);
     rows.push(
       [
         cell(log.raceNo),
-        cell(log.predictedFirst),
-        cell(log.tenjiFast),
         cell(log.resultFirst),
         cell(log.resultSecond),
         cell(log.resultThird),
-        cell(hit === null ? null : hit ? '○' : '×'),
         cell(log.kimarite),
         cell(log.suimen),
         cell(log.memo),

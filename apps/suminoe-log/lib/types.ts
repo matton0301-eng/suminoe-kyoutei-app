@@ -13,8 +13,6 @@ export type ResultPlace = 'resultFirst' | 'resultSecond' | 'resultThird';
 export interface RaceLog {
   id: string;
   raceNo: number;
-  predictedFirst: Boat | null;
-  tenjiFast: Boat | null;
   resultFirst: Boat | null;
   resultSecond: Boat | null;
   resultThird: Boat | null;
@@ -33,8 +31,6 @@ export interface StoredData {
 /** 記録タブのフォーム状態。下書きとしてそのまま保存する。 */
 export interface FormState {
   raceNo: number;
-  predictedFirst: Boat | null;
-  tenjiFast: Boat | null;
   resultFirst: Boat | null;
   resultSecond: Boat | null;
   resultThird: Boat | null;
@@ -76,8 +72,6 @@ export const SUIMEN_OPTIONS: readonly Suimen[] = ['静か', 'ふつう', '荒れ
 
 export const EMPTY_FORM: FormState = {
   raceNo: MIN_RACE_NO,
-  predictedFirst: null,
-  tenjiFast: null,
   resultFirst: null,
   resultSecond: null,
   resultThird: null,

@@ -25,29 +25,9 @@ export function StatsTab({ stats }: StatsTabProps) {
 
   return (
     <div className="space-y-3 pb-20">
-      {/* ① 予想の的中率 */}
+      {/* ① コース別1着率 */}
       <section className="rounded-xl border border-line bg-bg-panel p-4">
-        <h2 className="text-sm font-bold text-text-mute">1着予想の的中</h2>
-        <p className="mt-1 flex items-baseline gap-2">
-          <span className="tnum text-4xl font-black text-text-main">
-            {stats.hitRate.hit}
-            <span className="text-2xl text-text-mute"> / {stats.hitRate.total}</span>
-          </span>
-          <span className="text-base text-text-mute">レース</span>
-          <span className="tnum ml-auto text-2xl font-bold text-accent">
-            {formatRate(stats.hitRate.rate)}
-          </span>
-        </p>
-        {stats.hitRate.total === 0 ? (
-          <p className="mt-1 text-xs text-text-mute">
-            予想と結果1着の両方が入ったレースが母数です。
-          </p>
-        ) : null}
-      </section>
-
-      {/* ② コース別1着率 */}
-      <section className="rounded-xl border border-line bg-bg-panel p-4">
-        <h2 className="text-base font-bold text-text-main">コース別1着率</h2>
+        <h2 className="paper-heading text-sm">コース別1着率</h2>
         <p className="mt-0.5 text-xs text-text-mute">
           当日 {stats.resultCount} レース分 ／ 破線は住之江の基準値（{BASELINE_PERIOD}）
         </p>

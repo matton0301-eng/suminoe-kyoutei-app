@@ -114,7 +114,6 @@ export function TotalTallyView({ total, loading, error }: TotalTallyViewProps) {
                 <th className="pb-1.5 text-right font-normal">確定R</th>
                 <th className="pb-1.5 text-right font-normal">回収率</th>
                 <th className="pb-1.5 text-right font-normal">収支</th>
-                <th className="pb-1.5 text-right font-normal">自分の予想</th>
               </tr>
             </thead>
             <tbody>
@@ -133,29 +132,11 @@ export function TotalTallyView({ total, loading, error }: TotalTallyViewProps) {
                   <td className="py-1.5 text-right">
                     <Balance value={day.balanceYen} />
                   </td>
-                  <td className="tnum py-1.5 text-right text-text-main">
-                    {day.predictionTotal === null || day.predictionTotal === 0
-                      ? '—'
-                      : `${day.predictionHit}/${day.predictionTotal}`}
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {total.predictionTotal !== null && total.predictionTotal > 0 ? (
-          <p className="mt-2 text-[11px] text-text-mute">
-            自分の予想（1着）の通算:{' '}
-            <span className="tnum text-text-main">
-              {total.predictionHit}/{total.predictionTotal}
-            </span>{' '}
-            （<Rate value={total.predictionRate} />）。記録を入れた日だけが母数です。
-          </p>
-        ) : (
-          <p className="mt-2 text-[11px] text-text-mute">
-            記録タブで予想を入れた日は、ここに自分の的中も並びます。
-          </p>
-        )}
       </section>
 
       {/* 賭式ごと */}

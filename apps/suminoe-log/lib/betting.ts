@@ -36,16 +36,6 @@ const COURSE_WEIGHT_FIRST = 14;
  */
 const COURSE_WEIGHT_PLACE = 28;
 
-/**
- * 展示で速いと見た艇に足す評価（勝率スケール）。
- *
- * 展示走行は現地の電光掲示板でしか分からない直前情報で、事前の分析には入っていない。
- * ただし「速く見えた」という主観1つで判断を大きく動かすべきではないので、
- * 1コースと2コースのコース補正差（2.93）より小さい +0.6 に留める。
- * 勝率0.6の差は「B1級の上位とA2級の下位」程度の開きにあたる。
- */
-export const TENJI_BONUS = 0.6;
-
 /** 当日実測をコース別1着率に混ぜる上限。母数が小さいので控えめに寄せる。 */
 const MAX_ACTUAL_WEIGHT = 0.5;
 /** この母数で上限の重みに達する */
@@ -95,8 +85,6 @@ export interface BetSuggestion {
   actualWeight: number;
   /** 軸が1号艇でない場合の注意 */
   anchorNote: string | null;
-  /** 展示で速いと見て評価を上げた艇。反映していなければ null */
-  tenjiFast: Boat | null;
 }
 
 /**
@@ -126,27 +114,27 @@ export function blendCourseRates(
   return { rates, weight };
 }
 
-function scoreBoats(
-  race: CardRace,
-  courseRates: Record<Boat, number>,
-  tenjiFast: Boat | null,
-): BoatScore[] {
+function scoreBoats(race: CardRace, courseRates: Record<Boat, number>): BoatScore[] {
   return race.boats
     .map((boat) => {
-      // 展示で速く見えた艇は、その日その時点の調子として評価に足す
-      const tenji = tenjiFast === boat.teiban ? TENJI_BONUS : 0;
       return {
         teiban: boat.teiban,
-        firstScore: boat.evalShoritsu + tenji + courseRates[boat.teiban] / COURSE_WEIGHT_FIRST,
-        placeScore: boat.evalShoritsu + tenji + courseRates[boat.teiban] / COURSE_WEIGHT_PLACE,
+        firstScore: boat.evalShoritsu + courseRates[boat.teiban] / COURSE_WEIGHT_FIRST,
+        placeScore: boat.evalShoritsu + courseRates[boat.teiban] / COURSE_WEIGHT_PLACE,
       };
     })
     .sort((a, b) => b.firstScore - a.firstScore || a.teiban - b.teiban);
 }
 
+/**
+ * 買い目の候補を舟券の書き方で並べる。
+ *
+ * `{2,3,4}` のような集合の記法は使わない（数学の式に見えて、
+ * マークシートとも公式のオッズ表とも並びが違う）。
+ */
 function formatSet(boats: Boat[]): string {
   const unique = [...new Set(boats)].sort((a, b) => a - b);
-  return unique.length === 1 ? String(unique[0]) : `{${unique.join(',')}}`;
+  return unique.join('・');
 }
 
 /** 順番が意味を持つ賭式の組み合わせを列挙する */
@@ -202,13 +190,11 @@ export function buildSuggestion(
   race: CardRace,
   actualRates: Partial<Record<Boat, number | null>>,
   resultCount: number,
-  /** 展示で速いと見た艇。現地で入力された直前情報を反映する */
-  tenjiFast: Boat | null = null,
 ): BetSuggestion | null {
   if (!race.ok || race.boats.length !== 6) return null;
 
   const { rates, weight } = blendCourseRates(actualRates, resultCount);
-  const scores = scoreBoats(race, rates, tenjiFast);
+  const scores = scoreBoats(race, rates);
   const anchor = scores[0].teiban;
 
   const partners = [...scores]
@@ -232,7 +218,7 @@ export function buildSuggestion(
       key: 'trifecta-formation',
       name: '3連単フォーメーション',
       hitCondition: '1着・2着・3着を順番どおり当てる',
-      formation: `${anchor}-${formatSet(top2)}-${formatSet(top4)}`,
+      formation: `${anchor} → ${formatSet(top2)} → ${formatSet(top4)}`,
       tickets: permutationsFrom([anchor], top2, top4),
       suitedFor: '軸が信頼できて、相手が絞れているとき',
       primary: primaries.has('trifecta-formation'),
@@ -241,7 +227,7 @@ export function buildSuggestion(
       key: 'trifecta-box',
       name: '3連単ボックス',
       hitCondition: '選んだ3艇が1〜3着を独占すれば、順番はどれでも当たる',
-      formation: `${[anchor, ...top2].sort((a, b) => a - b).join('・')} のボックス`,
+      formation: `${[anchor, ...top2].sort((a, b) => a - b).join('・')} ボックス`,
       tickets: permutationsFrom(
         [anchor, ...top2],
         [anchor, ...top2],
@@ -254,7 +240,7 @@ export function buildSuggestion(
       key: 'trio',
       name: '3連複',
       hitCondition: '1〜3着に入る3艇を当てる（順番は不問）',
-      formation: `${anchor}-${formatSet(top3)} から2艇`,
+      formation: `${anchor} = ${formatSet(top3)} から2艇`,
       tickets: combinationsWithAnchor(anchor, top3, 3),
       suitedFor: '3連単より当たりやすい。着順まで読み切れないとき',
       primary: primaries.has('trio'),
@@ -263,7 +249,7 @@ export function buildSuggestion(
       key: 'exacta',
       name: '2連単',
       hitCondition: '1着と2着を順番どおり当てる',
-      formation: `${anchor}-${formatSet(top2)}`,
+      formation: `${anchor} → ${formatSet(top2)}`,
       tickets: permutationsFrom([anchor], top2),
       suitedFor: '軸の1着が濃厚で、相手を2艇に絞れるとき',
       primary: primaries.has('exacta'),
@@ -272,7 +258,7 @@ export function buildSuggestion(
       key: 'quinella',
       name: '2連複',
       hitCondition: '1着と2着に入る2艇を当てる（順番は不問）',
-      formation: `${anchor}=${formatSet(top2)}`,
+      formation: `${anchor} = ${formatSet(top2)}`,
       tickets: combinationsWithAnchor(anchor, top2, 2),
       suitedFor: '2艇は絞れるが、どちらが勝つか読めないとき',
       primary: primaries.has('quinella'),
@@ -281,7 +267,7 @@ export function buildSuggestion(
       key: 'wide',
       name: 'ワイド（拡連複）',
       hitCondition: '選んだ2艇がどちらも3着以内に入れば当たる',
-      formation: `${anchor}=${formatSet(top2)}`,
+      formation: `${anchor} = ${formatSet(top2)}`,
       tickets: combinationsWithAnchor(anchor, top2, 2),
       suitedFor: '当たりやすさ重視。荒れそうな日の保険',
       primary: primaries.has('wide'),
@@ -317,7 +303,6 @@ export function buildSuggestion(
     scores,
     plans,
     actualWeight: weight,
-    tenjiFast,
     anchorNote:
       anchor === 1
         ? null

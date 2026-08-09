@@ -12,13 +12,6 @@ import {
 } from './baseline';
 import { BOATS, KIMARITE_OPTIONS, type Boat, type Kimarite, type RaceLog } from './types';
 
-export interface HitRate {
-  hit: number;
-  /** 予想と結果1着の両方が入っているレース数 */
-  total: number;
-  rate: number | null;
-}
-
 export interface CourseStat {
   course: Boat;
   count: number;
@@ -45,7 +38,6 @@ export interface Stats {
   totalLogs: number;
   /** 結果1着が入っているレース数。コース別1着率と傾向判定の母数。 */
   resultCount: number;
-  hitRate: HitRate;
   courses: CourseStat[];
   kimarite: KimariteStat[];
   roughCount: number;
@@ -59,11 +51,6 @@ function ratio(count: number, total: number): number | null {
 export function aggregate(logs: RaceLog[]): Stats {
   const withResult = logs.filter((log) => log.resultFirst !== null);
   const resultCount = withResult.length;
-
-  const predictable = logs.filter(
-    (log) => log.predictedFirst !== null && log.resultFirst !== null,
-  );
-  const hit = predictable.filter((log) => log.predictedFirst === log.resultFirst).length;
 
   const courses: CourseStat[] = BOATS.map((course) => {
     const count = withResult.filter((log) => log.resultFirst === course).length;
@@ -91,7 +78,6 @@ export function aggregate(logs: RaceLog[]): Stats {
   return {
     totalLogs: logs.length,
     resultCount,
-    hitRate: { hit, total: predictable.length, rate: ratio(hit, predictable.length) },
     courses,
     kimarite,
     roughCount,
@@ -132,12 +118,6 @@ function buildReading(
     return { ready: true, text: '2マークが荒れてる。逆転に注意。' };
   }
   return { ready: true, text: 'おおむね基準どおり。セオリー重視で。' };
-}
-
-/** 予想が的中したか。予想か結果が欠けている場合は null（○×を出さない）。 */
-export function isHit(log: RaceLog): boolean | null {
-  if (log.predictedFirst === null || log.resultFirst === null) return null;
-  return log.predictedFirst === log.resultFirst;
 }
 
 /** 「1-3-2」形式。欠けている着は「?」で埋める。 */

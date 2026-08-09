@@ -10,7 +10,7 @@
 
 import { useState, type Dispatch } from 'react';
 
-import { formatResult, isHit } from '@/lib/aggregate';
+import { formatResult } from '@/lib/aggregate';
 import type { FormAction } from '@/lib/formReducer';
 import type { CardRace } from '@/lib/raceCard';
 import {
@@ -172,39 +172,7 @@ export function RecordTab({
         )}
       </section>
 
-      {/* ② 予想 */}
-      <Section title="1着になると思う艇">
-        <BoatPicker
-          label="1着になると思う艇"
-          selected={form.predictedFirst}
-          onSelect={(boat) => dispatch({ type: 'toggleBoat', field: 'predictedFirst', boat })}
-        />
-        {race ? (
-          <ul className="grid grid-cols-6 gap-2 pt-0.5">
-            {race.boats.map((boat) => (
-              <li key={boat.teiban} className="min-w-0 text-center">
-                <span className="block truncate text-[10px] leading-tight text-text-main">
-                  {boat.name}
-                </span>
-                <span className="block text-[9px] leading-tight text-text-mute">
-                  {boat.kyubetsu}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </Section>
-
-      {/* ③ 展示 */}
-      <Section title="展示で速そうに見えた艇（任意）" hint="もう一度押すと選択を外せます">
-        <BoatPicker
-          label="展示で速そうに見えた艇"
-          selected={form.tenjiFast}
-          onSelect={(boat) => dispatch({ type: 'toggleBoat', field: 'tenjiFast', boat })}
-        />
-      </Section>
-
-      {/* ④ 結果（2着・3着は折りたたむ） */}
+      {/* ② 結果（2着・3着は折りたたむ） */}
       <Section title="結果" hint="同じ艇を選び直すと、前の行から自動で外れます">
         <BoatPicker
           label="結果 1着"
@@ -323,7 +291,6 @@ export function RecordTab({
           >
             <div className="flex items-baseline gap-2">
               <span className="tnum text-xl font-black text-text-main">{lastLog.raceNo}R</span>
-              <HitBadge log={lastLog} />
               <span className="tnum text-base text-text-main">{formatResult(lastLog)}</span>
               {lastLog.kimarite ? (
                 <span className="text-sm text-text-mute">{lastLog.kimarite}</span>
@@ -350,18 +317,3 @@ export function RecordTab({
   );
 }
 
-function HitBadge({ log }: { log: RaceLog }) {
-  const hit = isHit(log);
-  if (hit === null) return null;
-  return (
-    <span
-      aria-label={hit ? '予想的中' : '予想はずれ'}
-      className={[
-        'rounded px-1.5 py-0.5 text-sm font-black',
-        hit ? 'on-accent bg-accent' : 'bg-bg-raised text-text-mute',
-      ].join(' ')}
-    >
-      {hit ? '○' : '×'}
-    </span>
-  );
-}

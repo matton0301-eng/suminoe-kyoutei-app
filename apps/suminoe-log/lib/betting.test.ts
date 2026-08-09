@@ -94,6 +94,29 @@ describe('blendCourseRates', () => {
   });
 });
 
+describe('買い目の書き方', () => {
+  it('集合の記法を使わない（マークシートと並びを揃える）', () => {
+    const suggestion = buildSuggestion(evenRace(), {}, 0)!;
+    for (const plan of suggestion.plans) {
+      assert.doesNotMatch(plan.formation, /[{}]/, `${plan.name}: ${plan.formation}`);
+    }
+  });
+
+  it('3連単は着順が分かる向きで並べる', () => {
+    const suggestion = buildSuggestion(evenRace(), {}, 0)!;
+    const formation = suggestion.plans.find((p) => p.key === 'trifecta-formation')!.formation;
+    assert.match(formation, /→/);
+  });
+
+  it('順不同の賭式は = でつなぐ', () => {
+    const suggestion = buildSuggestion(evenRace(), {}, 0)!;
+    for (const key of ['trio', 'quinella', 'wide'] as const) {
+      const formation = suggestion.plans.find((p) => p.key === key)!.formation;
+      assert.match(formation, /=/, key);
+    }
+  });
+});
+
 describe('buildSuggestion', () => {
   it('出走表がそろっていないレースでは何も返さない', () => {
     const broken: CardRace = { ...evenRace(), ok: false, boats: [] };

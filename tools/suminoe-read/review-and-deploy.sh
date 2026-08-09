@@ -20,6 +20,9 @@ APP_DIR="$(cd "$HERE/../../apps/suminoe-log" && pwd)"
 RESULTS_JSON="$APP_DIR/public/results.json"
 LOG_DIR="$HERE/logs"
 PYTHON="$HERE/venv/Scripts/python.exe"
+#: 確定オッズの取得（レース後にしか取れないので、成績が確定した回に必ず残す）
+TSX="$HERE/../suminoe-mcp/node_modules/.bin/tsx"
+ODDS_SCRIPT="$HERE/../suminoe-mcp/scripts/fetch-odds.ts"
 
 TARGET_DATE="${1:-$(date +%Y-%m-%d)}"
 
@@ -75,6 +78,21 @@ if [[ "$WROTE_DATE" != "$TARGET_DATE" ]]; then
   exit 1
 fi
 log "結果データを更新しました（$WROTE_DATE）。"
+
+# --- 確定オッズを残す ---
+# 全レース終了後のオッズ＝確定配当と同じ値。**当日を過ぎると二度と取れない。**
+# これを貯めておくと、あとから「期待値の高い買い目を実際に買ったらどうなったか」を
+# 検証できる（cache/odds/ に日付ごとに時刻付きで残る）。
+if [[ -x "$TSX" ]]; then
+  log "確定オッズを取得します..."
+  if "$TSX" "$ODDS_SCRIPT" --date "$TARGET_DATE" >>"$LOG_FILE" 2>&1; then
+    log "  確定オッズを保存しました。"
+  else
+    log "  確定オッズは取得できませんでした（終了コード $?）。照合は続けます。"
+  fi
+else
+  log "確定オッズ: tsx が見つからないため飛ばしました（$TSX）"
+fi
 
 # 照合の要点をログに残す（あとで見返せるように）
 if [[ -f "$HERE/output/review_${TARGET_DATE//-/}.md" ]]; then

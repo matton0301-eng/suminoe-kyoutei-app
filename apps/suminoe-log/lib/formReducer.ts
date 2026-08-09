@@ -19,7 +19,6 @@ import {
 
 export type FormAction =
   | { type: 'stepRaceNo'; delta: number }
-  | { type: 'toggleBoat'; field: 'predictedFirst' | 'tenjiFast'; boat: Boat }
   | { type: 'setResult'; place: ResultPlace; boat: Boat }
   | { type: 'toggleKimarite'; value: Kimarite }
   | { type: 'toggleSuimen'; value: Suimen }
@@ -57,12 +56,6 @@ export function formReducer(state: FormState, action: FormAction): FormState {
     case 'stepRaceNo':
       return { ...state, raceNo: clampRaceNo(state.raceNo + action.delta) };
 
-    case 'toggleBoat':
-      return {
-        ...state,
-        [action.field]: state[action.field] === action.boat ? null : action.boat,
-      };
-
     case 'setResult':
       return assignResult(state, action.place, action.boat);
 
@@ -81,8 +74,6 @@ export function formReducer(state: FormState, action: FormAction): FormState {
     case 'loadForEdit':
       return {
         raceNo: action.log.raceNo,
-        predictedFirst: action.log.predictedFirst,
-        tenjiFast: action.log.tenjiFast,
         resultFirst: action.log.resultFirst,
         resultSecond: action.log.resultSecond,
         resultThird: action.log.resultThird,
@@ -107,8 +98,6 @@ export function toRaceLog(form: FormState, id: string): RaceLog {
   return {
     id,
     raceNo: form.raceNo,
-    predictedFirst: form.predictedFirst,
-    tenjiFast: form.tenjiFast,
     resultFirst: form.resultFirst,
     resultSecond: form.resultSecond,
     resultThird: form.resultThird,

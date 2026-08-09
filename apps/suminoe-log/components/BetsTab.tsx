@@ -24,7 +24,7 @@ import { ORDERED_KEYS, buildSuggestion, formatTicket, type BetPlan } from '@/lib
 import { COURSE_FIRST_RATE } from '@/lib/baseline';
 import type { Calibration } from '@/lib/calibration';
 import { findRaceOdds, formatFetchedAt, type OddsDay } from '@/lib/odds';
-import { buildPatterns, formatPatternTicket, type BetPattern } from '@/lib/patterns';
+import { buildPatterns, formatPatternTicket, heatOf, type BetPattern } from '@/lib/patterns';
 import { DEFAULT_TEMPERATURE, buildProbabilities } from '@/lib/probability';
 import type { CardRace, RaceCard } from '@/lib/raceCard';
 import { reviewPlans } from '@/lib/review';
@@ -42,7 +42,7 @@ interface BetsTabProps {
   results: ResultDay | null;
   /**
    * 公式の直前情報（展示タイム・スタート展示）。締切の10〜15分前に順次入る。
-   * **表示だけに使う。** 買い目の評価は記録タブの手入力（tenjiFastFor）で行う
+   * **表示だけに使う。** 買い目の評価には入れない（同じ材料で2回評価しないため）
    */
   tenji: TenjiDay | null;
   /** 公式のオッズ。30分おきに更新されるので、表示には取得時刻を必ず添える */
@@ -51,8 +51,6 @@ interface BetsTabProps {
   calibration: Calibration | null;
   /** 記録タブで選んでいるレース番号。切り替わったらこちらも追従する */
   focusRaceNo: number;
-  /** そのレースで「展示が速い」と見た艇を返す（現地の直前情報） */
-  tenjiFastFor: (raceNo: number) => Boat | null;
   onImport: (raw: string) => void;
   onClearCard: () => void;
   importError: string | null;
@@ -69,7 +67,6 @@ export function BetsTab({
   odds,
   calibration,
   focusRaceNo,
-  tenjiFastFor,
   onImport,
   onClearCard,
   importError,
@@ -99,9 +96,9 @@ export function BetsTab({
   const suggestion = useMemo(
     () =>
       race
-        ? buildSuggestion(race, actualCourseRates, resultCount, tenjiFastFor(race.raceNo))
+        ? buildSuggestion(race, actualCourseRates, resultCount)
         : null,
-    [race, actualCourseRates, resultCount, tenjiFastFor],
+    [race, actualCourseRates, resultCount],
   );
 
   /** 結果データが同じ日付で、そのレースが終わっていれば突き合わせる */
@@ -223,7 +220,7 @@ export function BetsTab({
       {/* レース選択 */}
       <section className="rounded-xl border border-line bg-bg-panel p-3">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-bold text-text-mute">レースを選ぶ</h2>
+          <h2 className="paper-heading text-xs">レースを選ぶ</h2>
           <p className="text-xs text-text-mute">{card.date}</p>
         </div>
         <div className="mt-2 grid grid-cols-6 gap-2">
@@ -333,7 +330,7 @@ export function BetsTab({
       {/* 補正の説明 */}
       {suggestion ? (
         <section className="rounded-xl border border-line bg-bg-panel p-3">
-          <h2 className="text-sm font-bold text-text-mute">買い目の組み立て方</h2>
+          <h2 className="paper-heading text-xs">買い目の組み立て方</h2>
           <p className="mt-1 text-xs text-text-main">
             軸は <strong>{suggestion.anchor}号艇</strong>、相手は{' '}
             {suggestion.partners.slice(0, 3).join('・')}号艇 の順で評価しています。
@@ -345,13 +342,6 @@ export function BetsTab({
                 }たまると実測を混ぜます）。`
               : `当日の実測を ${Math.round(suggestion.actualWeight * 100)}% 混ぜて補正しています（母数 ${resultCount} レース）。`}
           </p>
-          {suggestion.tenjiFast !== null ? (
-            <p className="mt-2 rounded-lg border border-accent bg-bg-raised px-2 py-1.5 text-xs text-text-main">
-              <strong className="text-accent">展示を反映中</strong>：
-              記録タブで「展示が速そう」と選んだ{suggestion.tenjiFast}号艇の評価を上げています。
-              現地で見た直前の情報なので、事前の分析より新しい材料です。
-            </p>
-          ) : null}
           {suggestion.anchorNote ? (
             <p className="mt-2 text-xs font-bold text-accent">{suggestion.anchorNote}</p>
           ) : null}
@@ -379,7 +369,7 @@ export function BetsTab({
       {patterns.length > 0 ? (
         <section className="space-y-2">
           <div className="flex items-baseline gap-2">
-            <h2 className="text-base font-bold text-text-main">このレースの買い方</h2>
+            <h2 className="paper-heading text-sm">このレースの買い方</h2>
             <span className="ml-auto text-[11px] text-text-mute">
               {raceOdds
                 ? `オッズ ${formatFetchedAt(raceOdds.fetchedAt) ?? '—'} 時点`
@@ -452,7 +442,7 @@ function RaceCardTable({
 
   return (
     <section className="rounded-xl border border-line bg-bg-panel p-3">
-      <h2 className="text-sm font-bold text-text-mute">出走表</h2>
+      <h2 className="paper-heading text-xs">出走表</h2>
       <div className="mt-2 overflow-x-auto">
         {/*
           min-width を置かない。幅360pxの実測で、7列（展示あり）でも 307px に収まり
@@ -569,20 +559,23 @@ const BREAK_EVEN = 1;
 function PatternCard({ pattern }: { pattern: BetPattern }) {
   const worthwhile = pattern.expectedValue !== null && pattern.expectedValue >= BREAK_EVEN;
   const empty = pattern.points === 0;
+  const heat = heatOf(pattern.hitProbability);
 
   return (
     <section
       className={[
-        'rounded-xl border p-3',
-        empty
-          ? 'border-line bg-bg-panel/60'
-          : worthwhile
-            ? 'border-accent bg-bg-panel'
-            : 'border-line bg-bg-panel',
+        'relative border py-2 pl-3.5 pr-2.5',
+        empty ? 'border-line bg-bg-panel/60' : 'border-line bg-bg-panel',
+        worthwhile && !empty ? 'border-l-0' : '',
       ].join(' ')}
     >
+      {/* 期待度の帯。色だけで判断させないよう、右の的中率と必ず対で読む */}
+      {!empty && heat.level > 0 ? (
+        <span className={`heat-bar heat-${heat.level}`} aria-hidden="true" />
+      ) : null}
+
       <div className="flex items-baseline gap-2">
-        <h3 className="text-base font-black text-text-main">{pattern.label}</h3>
+        <h3 className="text-base font-black tracking-wide text-text-main">{pattern.label}</h3>
         {empty ? null : (
           <span className="text-xs text-text-mute">
             {pattern.betTypeName} {pattern.points}点
@@ -590,10 +583,25 @@ function PatternCard({ pattern }: { pattern: BetPattern }) {
         )}
         {empty ? null : (
           <span className="tnum ml-auto text-xs text-text-mute">
-            的中率 {(pattern.hitProbability * 100).toFixed(1)}%
+            的中率{' '}
+            <strong className="text-sm text-text-main">
+              {(pattern.hitProbability * 100).toFixed(1)}%
+            </strong>
           </span>
         )}
       </div>
+
+      {/* 言葉には必ず基準を添える。「激熱」だけを出すと煽りになる */}
+      {!empty && heat.level > 0 ? (
+        <p className="mt-0.5 flex items-baseline gap-1.5">
+          <span className={`text-lg font-black tracking-widest heat-text-${heat.level}`}>
+            {heat.label}
+          </span>
+          <span className="tnum text-[10px] text-text-mute">
+            = 的中率 {Math.round(heat.threshold * 100)}% 以上
+          </span>
+        </p>
+      ) : null}
 
       {empty ? null : (
         <ul className="mt-2 flex flex-wrap gap-1.5">

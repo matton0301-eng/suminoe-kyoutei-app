@@ -1,26 +1,30 @@
 @import 'tailwindcss';
 
 /**
- * デザイン方向: 「水面（Water Surface）」
+ * デザイン方向: 「競艇新聞」
  *
- * 住之江はプール型の静水面で「静水面の聖地」と呼ばれる。
- * 明るい水面と、そこを切って走る艇の波しぶき——これを画面の主題にしている。
+ * 現地で読むものは新聞である、という一点から組んでいる。
+ * 白地に墨、差し色は朱。角丸は使わず、太罫でセクションを切り、細罫で行を分ける。
+ * 余白は詰める。紙面は情報密度が価値で、余白は価値ではない。
  *
  * **2つのテーマを持つ。**
- *   light（既定）  昼の水面。明るく爽やかな水色。自宅や日中の下見で使う
- *   dark           ナイターの水面。薄暗い観客席で画面がまぶしくならない
+ *   light（既定）  昼の紙面。生成りの紙に墨
+ *   dark           ナイターの紙面。墨地に白抜き。薄暗い観客席でまぶしくならない
  *
  * 元仕様の最重要要件は「夜間の屋外で画面がまぶしくならないこと」なので、
  * 現地では dark に切り替えられるようにしてある（ヘッダーのトグル）。
- * `data-theme` 属性で切り替え、選択は localStorage に残す。
  *
  * 色の役割:
- *   背景   = 水。上が浅く下が深い
- *   accent = 水のきらめき（ターコイズ）
- *   枠番6色 = 艇。彩度の高い「面」はこの6色だけ
+ *   背景   = 紙
+ *   accent = 朱。新聞が本命や注目に使う色で、ここぞという1点にだけ置く
+ *   枠番6色 = 艇。彩度の高い「面」はこの6色だけ（新聞の枠色と同じ約束）
+ *   期待度  = 青→緑→赤→虹。パチンコの信頼度表示から借りた階調で、
+ *            **必ず的中率の数字と一緒に出す**（煽りではなく指標にするため）
  *
- * 1号艇の白は明るい背景に埋没するため、枠色ボタンには必ず輪郭を付ける
- * （`--boat-edge`）。これは light テーマでは必須。
+ * 1号艇の白は紙の地に埋没するため、枠色ボタンには必ず輪郭を付ける（`--boat-edge`）。
+ *
+ * フォントは外部読み込みをしない（オフラインで動くことが要件）。
+ * 見出しは太いゴシックを詰めて組む。実機は Android で、明朝は入っていないことがある。
  */
 @theme {
   /* 既定は light。実際の値は :root で定義し、dark は data-theme で差し替える */
@@ -38,59 +42,59 @@
   --font-sans:
     system-ui, -apple-system, 'Segoe UI', 'Noto Sans JP', 'Hiragino Kaku Gothic ProN',
     sans-serif;
+
+  /* 新聞に角丸は無い。Tailwind の rounded-* をまとめて潰す */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
 }
 
-/* --- light（既定）: 昼の水面 --- */
+/* --- light（既定）: 昼の紙面 --- */
 :root {
-  --surface-deep: #eef8fb;
-  --surface-panel: #ffffff;
-  --surface-raised: #e2f2f7;
-  --ink-main: #0a2a33;
-  --ink-mute: #56818d;
-  --tone-accent: #0e9aa0;
-  --tone-accent-hot: #076e73;
-  --tone-line: #c3e0e8;
+  /* 生成りの紙。真っ白より少し黄を含ませると新聞に見える */
+  --surface-deep: #efe9dc;
+  --surface-panel: #fbf8f1;
+  --surface-raised: #e7e0d0;
+  /* 墨。真っ黒より茶を含ませる（輪転機の黒） */
+  --ink-main: #16130f;
+  --ink-mute: #6b6156;
+  /* 朱。新聞が本命・注目に使う赤 */
+  --tone-accent: #c8102e;
+  --tone-accent-hot: #8f0a20;
+  --tone-line: #b9ad99;
 
-  /* 艇色ボタンの輪郭。白い1号艇を背景から分離するために必要 */
-  --boat-edge: rgba(10, 42, 51, 0.28);
-  /* 保存ボタンなど accent の面に乗せる文字 */
-  --on-accent: #ffffff;
-  /* 水面シーンの下地。素材が届く前・取得できない時もここで水に見せる */
-  --water-far: #a9dbe8;
-  --water-near: #7cc7da;
-  /* 水面シーンの素材。使う側のテーマだけが取得される */
-  --scene-water: url('/scene/light/water.webp');
-  --scene-spray-back: url('/scene/light/spray-back.webp');
-  --scene-spray-front: url('/scene/light/spray-front.webp');
-  /* 艇の素材は light/dark 共用。昼はそのまま */
-  --scene-boat-filter: none;
-  --scene-shadow-tone: rgba(10, 42, 51, 0.26);
-  --sky-glow: rgba(14, 154, 160, 0.1);
+  --boat-edge: rgba(22, 19, 15, 0.55);
+  --on-accent: #fbf8f1;
+
+  /* 期待度（パチンコの信頼度表示から）。必ず的中率の数字と一緒に出す */
+  --heat-1: #1c5fb8;
+  --heat-2: #147a3d;
+  --heat-3: #c8102e;
+  --heat-4: #b8860b;
 }
 
-/* --- dark: ナイターの水面 --- */
+/* --- dark: ナイターの紙面 --- */
 :root[data-theme='dark'] {
-  --surface-deep: #061a1f;
-  --surface-panel: #0b262c;
-  --surface-raised: #123840;
-  --ink-main: #eaf6f7;
-  --ink-mute: #7fa8ae;
-  --tone-accent: #3ed6c5;
-  --tone-accent-hot: #a8f0e6;
-  --tone-line: #1c4149;
+  --surface-deep: #14110d;
+  --surface-panel: #1d1915;
+  --surface-raised: #2a2520;
+  --ink-main: #f2ede1;
+  --ink-mute: #a3988a;
+  /* 墨地の上では朱を明るく起こさないと沈む */
+  --tone-accent: #ff4d61;
+  --tone-accent-hot: #ff8a97;
+  --tone-line: #453d34;
 
-  --boat-edge: rgba(234, 246, 247, 0.22);
-  --on-accent: #061a1f;
-  --water-far: #0d2f37;
-  --water-near: #17525d;
-  /* ナイターの水面・しぶきは別素材。色反転ではなく撮り直しの絵 */
-  --scene-water: url('/scene/dark/water.webp');
-  --scene-spray-back: url('/scene/dark/spray-back.webp');
-  --scene-spray-front: url('/scene/dark/spray-front.webp');
-  /* 艇だけは共用素材なので、夜の照明に合わせて落とす（反転ではない） */
-  --scene-boat-filter: brightness(0.68) saturate(0.8) contrast(1.06);
-  --scene-shadow-tone: rgba(0, 0, 0, 0.42);
-  --sky-glow: rgba(62, 214, 197, 0.08);
+  --boat-edge: rgba(242, 237, 225, 0.45);
+  --on-accent: #14110d;
+
+  --heat-1: #5c9ce6;
+  --heat-2: #3fbf6a;
+  --heat-3: #ff4d61;
+  --heat-4: #ffc94d;
 }
 
 html {
@@ -99,14 +103,7 @@ html {
 }
 
 body {
-  /* 水の深度を1枚の背景で表す。上が浅く、下に行くほど深い */
   background-color: var(--surface-deep);
-  background-image: radial-gradient(
-    120% 60% at 50% 0%,
-    var(--sky-glow) 0%,
-    transparent 60%
-  );
-  background-attachment: fixed;
   color: var(--ink-main);
   font-family: var(--font-sans);
   overscroll-behavior-y: none;
@@ -127,31 +124,92 @@ body {
   box-shadow: inset 0 0 0 1.5px var(--boat-edge);
 }
 
-/**
- * 署名要素: 鏡面反射。
- * 静水面に映り込む像。レース番号の下に薄く反転して置く。
- */
-.mirror {
-  transform: scaleY(-1);
-  opacity: 0.14;
-  -webkit-mask-image: linear-gradient(to top, transparent 12%, rgba(0, 0, 0, 0.95) 88%);
-  mask-image: linear-gradient(to top, transparent 12%, rgba(0, 0, 0, 0.95) 88%);
-  pointer-events: none;
-  user-select: none;
-}
-
 /** セクション見出しの左に立てる縦罫。装飾ではなく階層を示す */
 .rule-start {
-  border-inline-start: 2px solid var(--tone-line);
-  padding-inline-start: 0.625rem;
+  border-inline-start: 3px solid var(--ink-main);
+  padding-inline-start: 0.5rem;
 }
 
-/** 水のきらめき。選択されていることを示す */
+/** 選択されていることを示す。紙面なので光らせず、輪郭を締める */
 .accent-glow {
   box-shadow:
     inset 0 0 0 1.5px var(--boat-edge),
-    0 0 0 3px var(--tone-accent),
-    0 0 16px 2px color-mix(in srgb, var(--tone-accent) 45%, transparent);
+    0 0 0 2.5px var(--tone-accent);
+}
+
+/**
+ * 新聞の小見出し。墨の帯に白抜き。
+ * 紙面はこれで段落を切る（角丸も影も使わない）。
+ */
+.paper-heading {
+  background: var(--ink-main);
+  color: var(--surface-panel);
+  padding: 0.125rem 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  display: inline-block;
+}
+
+/** 太罫。セクションの頭に引く */
+.rule-top {
+  border-top: 3px solid var(--ink-main);
+}
+
+/** 紙面の枠。角丸のないカード */
+.paper-box {
+  background: var(--surface-panel);
+  border: 1px solid var(--tone-line);
+}
+
+/**
+ * 署名要素: 期待度の帯。
+ *
+ * 買い目カードの左端を縦に走る。新聞の朱線の位置に、パチンコの信頼度色を置いた。
+ * **色だけで判断させない。** 帯の横には必ず的中率の数字を併記する。
+ */
+.heat-bar {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 6px;
+}
+
+.heat-1 { background: var(--heat-1); }
+.heat-2 { background: var(--heat-2); }
+.heat-3 { background: var(--heat-3); }
+.heat-4 { background: var(--heat-4); }
+
+/**
+ * 最上位だけ虹。ここぞという1点にしか出ない。
+ *
+ * **動かさない。** background-position のアニメーションは毎フレーム描き直しになり、
+ * ナイター4時間の電池に響く（水面の演出で実測して分かっている）。
+ * 静止していても虹は十分目立つ。
+ */
+.heat-5 {
+  background: linear-gradient(
+    180deg,
+    #ff2d55 0%,
+    #ff9500 20%,
+    #ffd60a 40%,
+    #34c759 60%,
+    #0a84ff 80%,
+    #bf5af2 100%
+  );
+}
+
+/** 期待度の文字色 */
+.heat-text-1 { color: var(--heat-1); }
+.heat-text-2 { color: var(--heat-2); }
+.heat-text-3 { color: var(--heat-3); }
+.heat-text-4 { color: var(--heat-4); }
+
+.heat-text-5 {
+  background: linear-gradient(90deg, #ff2d55, #ff9500, #ffd60a, #34c759, #0a84ff, #bf5af2);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 900;
 }
 
 /** キーボード操作のフォーカスリングは消さない */
@@ -163,225 +221,6 @@ body {
 textarea,
 input[type='text'] {
   -webkit-tap-highlight-color: initial;
-}
-
-/* --- 水面のシーン（ヘッダーに同化） --- */
-
-/**
- * 舞台。ヘッダーの中に敷く。
- *
- * **画面下部には置かない。** そこは親指の操作領域で、記録タブが一番使う場所。
- * 130px の帯を置いたらコンテンツを横に断ち切り、操作面積も奪った。
- *
- * 左端をマスクで溶かす。全幅の写真帯に見えるのを防ぐための処置で、
- * 艇としぶきは右 60% にあるのでフェードが絵の主題に当たらない。
- * ヘッダーの `overflow-hidden` と `border-b` が外周を締める。
- */
-.scene {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 34%);
-  mask-image: linear-gradient(to right, transparent 0%, #000 34%);
-}
-
-/**
- * 水面。継ぎ目のないタイルを `repeat-x` で敷き、要素ごと横へずらして流す。
- *
- * **`background-position` ではなく `transform` で動かす。** 前者は毎フレーム
- * 描き直しになり、ナイター4時間の電池に響く。後者は GPU 合成で済む。
- *
- * **ずらす距離は `background-size` の幅と厳密に一致させる。** ずれると模様が飛ぶ。
- * 要素幅は「タイル幅 + 端末幅の上限」より広く取り、送り切った位置でも
- * 右端が画面に入らないようにする。
- *
- * `opacity` と `saturate` で背景の色域へ寄せる。素材のままの彩度だと
- * 淡い背景から浮いて、写真を貼ったように見える。
- */
-.scene-water {
-  position: absolute;
-  inset-inline-start: 0;
-  bottom: 0;
-  background-repeat: repeat-x;
-}
-
-/* 奥の水面。上端をぼかしてヘッダーの地色に溶かす（硬い線は板に見える） */
-.scene-water-far {
-  width: 1250px;
-  height: 58px;
-  background-image: var(--scene-water);
-  /* 原本 1380x166 に近い縦横比で敷く。縦につぶすと横縞（走査線）に見える */
-  background-size: 560px 58px;
-  background-color: var(--water-far);
-  opacity: 0.6;
-  filter: saturate(0.82);
-  animation: scene-drift-far 38s linear infinite;
-  -webkit-mask-image: linear-gradient(to top, #000 66%, transparent 100%);
-  mask-image: linear-gradient(to top, #000 66%, transparent 100%);
-}
-
-/* 手前の水面。横に伸ばして近さを出し、速く流して視差をつくる */
-.scene-water-near {
-  width: 1800px;
-  height: 22px;
-  background-image: var(--scene-water);
-  background-size: 1100px 22px;
-  background-position-y: bottom;
-  background-color: var(--water-near);
-  opacity: 0.85;
-  filter: saturate(0.85);
-  animation: scene-drift-near 17s linear infinite;
-  -webkit-mask-image: linear-gradient(to top, #000 40%, transparent 100%);
-  mask-image: linear-gradient(to top, #000 40%, transparent 100%);
-}
-
-/**
- * 喫水線の接地影。艇と水面の間に落とす。
- * これが無いと艇が水面に載っているだけの切り抜きに見える。
- * 手前の水面より奥に置くので、下半分は水に隠れて上半分だけが効く。
- */
-.scene-shadow {
-  position: absolute;
-  right: 20%;
-  bottom: 14px;
-  width: min(72px, 19vw);
-  height: 11px;
-  background: radial-gradient(
-    closest-side ellipse at 50% 50%,
-    var(--scene-shadow-tone) 0%,
-    transparent 72%
-  );
-}
-
-/**
- * 艇。船体・選手・モーターが1枚になった素材。**ここだけ彩度を落とさない**
- * （主題なので背景に溶かさない）。
- *
- * 船首は左を向いている。**傾きは正の角度で船首が上がる**（CSS の正回転は
- * 時計回りなので、左端が持ち上がる）。負にすると船首が突っ込む。
- * 喫水線は素材の下端から約 9% 上にあり、手前の水面（上端 18px）が覆う。
- *
- * **上端がヘッダーのタイトル行（下端 36px）に食い込まないこと。**
- * 幅 94px で高さ 59px、`bottom: 6px` なので上端は 39px。ここが基準。
- * **右に寄せすぎない。** `right: 7%` にすると船尾のしぶきが画面端で潰れる。
- */
-.scene-boat {
-  position: absolute;
-  right: 22%;
-  bottom: 6px;
-  width: min(94px, 24vw);
-  aspect-ratio: 487 / 308;
-  background-image: url('/scene/boat.webp');
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-  filter: var(--scene-boat-filter);
-  transform-origin: 50% 88%;
-  animation: scene-bob 3.8s ease-in-out infinite;
-}
-
-/**
- * しぶき。同じ素材を倍率・位相・透明度を変えて重ね、連続発生に見せる。
- * 変形の基点は発生源（船尾側の下）に置く。中心を基点にすると噴き上がりが
- * 上下に伸縮して、水が湧いているように見えない。
- *
- * **右の余白は拡大と外向き移動の分を見込む。** 基点が左寄りなので拡大分が
- * ほぼ全量右へ伸び、`right: 0` だと画面外へ出て切れる。
- */
-.scene-spray {
-  position: absolute;
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-}
-
-.scene-spray-back-a {
-  right: 3%;
-  bottom: 8px;
-  width: min(104px, 27vw);
-  aspect-ratio: 497 / 297;
-  background-image: var(--scene-spray-back);
-  opacity: 0.85;
-  transform-origin: 10% 100%;
-  animation: scene-spray-a 2.7s ease-in-out infinite alternate;
-}
-
-.scene-spray-back-b {
-  right: 9%;
-  bottom: 16px;
-  width: min(78px, 20vw);
-  aspect-ratio: 497 / 297;
-  background-image: var(--scene-spray-back);
-  opacity: 0.4;
-  transform-origin: 10% 100%;
-  animation: scene-spray-b 3.9s ease-in-out infinite alternate;
-}
-
-.scene-spray-front {
-  right: 30%;
-  bottom: 0;
-  width: min(56px, 15vw);
-  aspect-ratio: 378 / 206;
-  background-image: var(--scene-spray-front);
-  opacity: 0.62;
-  transform-origin: 78% 100%;
-  animation: scene-spray-c 2.2s ease-in-out infinite alternate;
-}
-
-/* タイル幅ぴったり送る。`background-size` の幅と必ず一致させる */
-@keyframes scene-drift-far {
-  to {
-    transform: translate3d(-560px, 0, 0);
-  }
-}
-
-@keyframes scene-drift-near {
-  to {
-    transform: translate3d(-1100px, 0, 0);
-  }
-}
-
-@keyframes scene-bob {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) rotate(3.2deg);
-  }
-  50% {
-    transform: translate3d(0, -3px, 0) rotate(4.6deg);
-  }
-}
-
-@keyframes scene-spray-a {
-  from {
-    transform: scale(1) translate3d(0, 0, 0);
-    opacity: 0.74;
-  }
-  to {
-    transform: scale(1.045) translate3d(3px, -5px, 0);
-    opacity: 1;
-  }
-}
-
-@keyframes scene-spray-b {
-  from {
-    transform: scale(1.04) translate3d(4px, 0, 0);
-    opacity: 0.22;
-  }
-  to {
-    transform: scale(0.96) translate3d(-4px, -6px, 0);
-    opacity: 0.56;
-  }
-}
-
-@keyframes scene-spray-c {
-  from {
-    transform: scale(0.97) translate3d(0, 0, 0);
-    opacity: 0.48;
-  }
-  to {
-    transform: scale(1.06) translate3d(-6px, -3px, 0);
-    opacity: 0.82;
-  }
 }
 
 @keyframes toast-in {
@@ -402,16 +241,5 @@ input[type='text'] {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-  }
-  /* 水面シーンは止める（消さずに静止させる）。静止時の姿勢は各要素の
-     opacity と、艇は素材そのままの水平で表示される */
-  .scene-water,
-  .scene-boat,
-  .scene-spray {
-    animation: none !important;
-  }
-  /* 艇だけは止めても旋回の傾きを保つ。水平だと走っていないように見える */
-  .scene-boat {
-    transform: rotate(3.6deg);
   }
 }

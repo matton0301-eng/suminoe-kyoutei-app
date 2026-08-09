@@ -23,12 +23,10 @@ function fakeTally(overrides: Partial<DayTally>): DayTally {
   };
 }
 
-function fakeLog(raceNo: number, predicted: Boat | null, resultFirst: Boat | null): RaceLog {
+function fakeLog(raceNo: number, _unused: Boat | null, resultFirst: Boat | null): RaceLog {
   return {
     id: `log-${raceNo}`,
     raceNo,
-    predictedFirst: predicted,
-    tenjiFast: null,
     resultFirst,
     resultSecond: null,
     resultThird: null,
@@ -44,29 +42,10 @@ describe('summarizeDay', () => {
     expect(summarizeDay({ date: '2026-08-09', tally: null, logs: [] })).toBeNull();
   });
 
-  it('記録が無い日は予想指標を null にする', () => {
+  it('その日の集計をそのまま持つ', () => {
     const summary = summarizeDay({ date: '2026-08-07', tally: fakeTally({}), logs: [] });
-    expect(summary?.predictionHit).toBeNull();
-    expect(summary?.predictionTotal).toBeNull();
     expect(summary?.investedYen).toBe(27600);
     expect(summary?.racesFinished).toBe(12);
-  });
-
-  it('記録がある日は予想の的中を数える', () => {
-    const logs = [fakeLog(1, 1, 1), fakeLog(2, 1, 2), fakeLog(3, null, 1)];
-    const summary = summarizeDay({ date: '2026-08-07', tally: fakeTally({}), logs });
-    expect(summary?.predictionHit).toBe(1); // 1R のみ的中
-    expect(summary?.predictionTotal).toBe(2); // 3R は予想が無いので母数に入れない
-  });
-
-  it('予想が全部欠けている記録なら母数 0 として扱い、的中も 0', () => {
-    const summary = summarizeDay({
-      date: '2026-08-07',
-      tally: fakeTally({}),
-      logs: [fakeLog(1, null, 1)],
-    });
-    expect(summary?.predictionTotal).toBe(0);
-    expect(summary?.predictionHit).toBe(0);
   });
 });
 
@@ -240,15 +219,7 @@ describe('aggregateDays', () => {
       logs: [fakeLog(1, 1, 1), fakeLog(2, 2, 2), fakeLog(3, 1, 3)],
     };
     const total = aggregateDays([dayWithLogs, day2]);
-    expect(total.predictionHit).toBe(2);
-    expect(total.predictionTotal).toBe(3);
-    expect(total.predictionRate).toBeCloseTo((2 / 3) * 100, 5);
-  });
-
-  it('どの日にも記録が無ければ通算の予想指標は null', () => {
-    const total = aggregateDays([day1, day2]);
-    expect(total.predictionHit).toBeNull();
-    expect(total.predictionTotal).toBeNull();
-    expect(total.predictionRate).toBeNull();
+    expect(total.totalDays).toBe(2);
+    expect(total.racesFinished).toBe(day1.tally!.racesFinished + day2.tally!.racesFinished);
   });
 });

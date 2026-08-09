@@ -268,5 +268,47 @@ export function formatPatternTicket(ticket: PatternTicket, ordered: boolean): st
   return ticket.boats.join(ordered ? '-' : '=');
 }
 
+/**
+ * 期待度。パチンコの信頼度表示（青→緑→赤→金→虹）から借りた階調。
+ *
+ * **煽り文句として使わない。** 言葉の横には必ず「的中率◯%」を出す。
+ * 「激熱」は感想ではなく「モデル上の的中率30%以上」という定義を持った印で、
+ * 競馬新聞の ◎ ○ ▲ と同じ性格のもの。
+ *
+ * 段階の切り方は、実際に出る値の幅に合わせてある。
+ * 3連複3点はおおむね 25〜60%、3連単6点は 10〜30% に収まるので、
+ * どちらの賭式も階調の上を動く（3連単で虹が出ることはまず無い）。
+ *
+ * **色だけで判断できる作りにはしない。** 数字と言葉を必ず添える
+ * （色覚特性のある人が読めなくなるため）。
+ */
+export type HeatLevel = 0 | 1 | 2 | 3 | 4 | 5;
+
+export interface Heat {
+  level: HeatLevel;
+  /** 画面に出す言葉。level 0 は出さない */
+  label: string;
+  /** その段に乗るための的中率 */
+  threshold: number;
+}
+
+const HEAT_GRADES: readonly Heat[] = [
+  { level: 5, label: '大当たり濃厚', threshold: 0.6 },
+  { level: 4, label: '超激熱', threshold: 0.45 },
+  { level: 3, label: '激熱', threshold: 0.3 },
+  { level: 2, label: '熱', threshold: 0.15 },
+  { level: 1, label: '注目', threshold: 0.08 },
+];
+
+export function heatOf(hitProbability: number): Heat {
+  return (
+    HEAT_GRADES.find((grade) => hitProbability >= grade.threshold) ?? {
+      level: 0,
+      label: '',
+      threshold: 0,
+    }
+  );
+}
+
 /** 3連単・3連複のキーを作る（呼び出し側で使う） */
 export { trifectaKey, trioKey };

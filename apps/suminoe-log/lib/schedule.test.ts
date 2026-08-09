@@ -9,10 +9,9 @@ import assert from 'node:assert/strict';
 
 import { describe, it } from 'vitest';
 
-import { buildSuggestion, TENJI_BONUS } from './betting';
-import type { CardBoat, CardRace } from './raceCard';
+import type { CardRace } from './raceCard';
 import { formatMinutesLeft, isUrgent, parseDeadlineMinutes, resolveSchedule } from './schedule';
-import type { Boat } from './types';
+
 
 function makeRace(raceNo: number, deadline: string): CardRace {
   return {
@@ -125,83 +124,4 @@ describe('formatMinutesLeft / isUrgent', () => {
 
 // --- 展示反映 ---
 
-function makeBoat(teiban: Boat, evalShoritsu: number): CardBoat {
-  return {
-    teiban,
-    name: `選手${teiban}`,
-    kyubetsu: 'B1',
-    age: 35,
-    branch: '大阪',
-    zenkokuShoritsu: evalShoritsu,
-    zenkokuNiritsu: 25,
-    touchiShoritsu: evalShoritsu,
-    touchiNiritsu: 25,
-    noTouchiData: false,
-    evalShoritsu,
-    motorNo: teiban * 10,
-    motorNiritsu: 30,
-    boatNo: teiban * 10,
-    boatNiritsu: 30,
-    konsetsu: '123',
-  };
-}
 
-function raceWith(scores: number[]): CardRace {
-  return {
-    ...makeRace(1, '15:17'),
-    boats: scores.map((s, i) => makeBoat((i + 1) as Boat, s)),
-  };
-}
-
-describe('展示の反映', () => {
-  it('展示を選ばなければ従来どおり', () => {
-    const race = raceWith([5, 5, 5, 5, 5, 5]);
-    const s = buildSuggestion(race, {}, 0);
-    assert.ok(s);
-    assert.equal(s.tenjiFast, null);
-    assert.equal(s.anchor, 1, '勝率が同じなら1コース有利で1号艇');
-  });
-
-  it('展示で速い艇は相手の評価が上がる', () => {
-    const race = raceWith([5, 5, 5, 5, 5, 5]);
-    const base = buildSuggestion(race, {}, 0);
-    // 5号艇（本来は相手の下位）を展示で速いと見た
-    const withTenji = buildSuggestion(race, {}, 0, 5);
-    assert.ok(base && withTenji);
-    assert.equal(withTenji.tenjiFast, 5);
-    assert.ok(
-      withTenji.partners.indexOf(5) < base.partners.indexOf(5),
-      '展示を反映した方が5号艇の順位が上がるはず',
-    );
-  });
-
-  it('展示の補正はコース補正より小さい（軸をむやみに動かさない）', () => {
-    // 1号艇と2号艇が同じ勝率。2号艇を展示で速いと見ても軸は1号艇のまま
-    const race = raceWith([5, 5, 4, 4, 4, 4]);
-    const s = buildSuggestion(race, {}, 0, 2);
-    assert.ok(s);
-    assert.equal(s.anchor, 1, '展示1つで軸が動くのは過剰反応');
-  });
-
-  it('展示で速い艇の評価が TENJI_BONUS ぶん上がっている', () => {
-    const race = raceWith([5, 5, 5, 5, 5, 5]);
-    const base = buildSuggestion(race, {}, 0);
-    const withTenji = buildSuggestion(race, {}, 0, 3);
-    assert.ok(base && withTenji);
-    const before = base.scores.find((s) => s.teiban === 3);
-    const after = withTenji.scores.find((s) => s.teiban === 3);
-    assert.ok(before && after);
-    assert.ok(
-      Math.abs(after.firstScore - before.firstScore - TENJI_BONUS) < 1e-9,
-      `補正が ${TENJI_BONUS} でない`,
-    );
-  });
-
-  it('十分に差があれば展示で軸が移る', () => {
-    // 1号艇が弱く、6号艇が展示も含めて上回るケース
-    const race = raceWith([3.0, 4, 4, 4, 4, 7.6]);
-    const withTenji = buildSuggestion(race, {}, 0, 6);
-    assert.ok(withTenji);
-    assert.equal(withTenji.anchor, 6);
-  });
-});

@@ -44,12 +44,6 @@ export function LogList({ logs }: LogListProps) {
             <span className="tnum text-sm text-text-mute">結果 {formatResult(log)}</span>
           </div>
           <dl className="mt-1 space-y-0.5 text-sm text-text-mute">
-            {log.predictedFirst !== null ? (
-              <Row label="予想1着" value={`${log.predictedFirst}号艇`} />
-            ) : null}
-            {log.tenjiFast !== null ? (
-              <Row label="展示で速そう" value={`${log.tenjiFast}号艇`} />
-            ) : null}
             {log.kimarite !== null ? <Row label="決まり手" value={log.kimarite} /> : null}
             {log.suimen !== null ? <Row label="水面" value={log.suimen} /> : null}
             {log.memo.trim() !== '' ? <Row label="メモ" value={log.memo} /> : null}

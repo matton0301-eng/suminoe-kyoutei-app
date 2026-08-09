@@ -79,8 +79,6 @@ function sanitizeLog(raw: unknown): RaceLog | null {
   if (typeof record.id !== 'string') return null;
   if (typeof record.raceNo !== 'number') return null;
   const boatFields = [
-    'predictedFirst',
-    'tenjiFast',
     'resultFirst',
     'resultSecond',
     'resultThird',
@@ -91,8 +89,6 @@ function sanitizeLog(raw: unknown): RaceLog | null {
   return {
     id: record.id,
     raceNo: record.raceNo,
-    predictedFirst: record.predictedFirst as RaceLog['predictedFirst'],
-    tenjiFast: record.tenjiFast as RaceLog['tenjiFast'],
     resultFirst: record.resultFirst as RaceLog['resultFirst'],
     resultSecond: record.resultSecond as RaceLog['resultSecond'],
     resultThird: record.resultThird as RaceLog['resultThird'],
@@ -185,8 +181,6 @@ export function countLogsByDate(): Record<string, number> {
 /** 下書きが実質空か（初期状態と変わらないか）。空なら復元通知を出さない。 */
 export function isDraftMeaningful(form: FormState): boolean {
   return (
-    form.predictedFirst !== null ||
-    form.tenjiFast !== null ||
     form.resultFirst !== null ||
     form.resultSecond !== null ||
     form.resultThird !== null ||

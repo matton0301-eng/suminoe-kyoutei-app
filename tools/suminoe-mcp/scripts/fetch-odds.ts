@@ -28,6 +28,18 @@ const PUBLIC_DIR = join(HERE, '..', '..', '..', 'apps', 'suminoe-log', 'public')
 const OUT_PATH = join(PUBLIC_DIR, 'odds.json');
 const ARCHIVE_DIR = join(PUBLIC_DIR, 'archive');
 
+/**
+ * オッズの推移をためる場所（git 管理外）。
+ *
+ * **オッズは当日しか取れない。** 過去に遡って取得する手段が無いので、
+ * 取れたときに必ず残す。これが無いと「期待値の高い買い目を実際に買ったら
+ * どうなったか」を後から検証できない（2026-08-09 時点で、確率順に買った
+ * 場合の回収率しか測れていないのはこれが理由）。
+ *
+ * レース終了後に取ったものが確定オッズで、任意の買い方の回収率を計算できる。
+ */
+const HISTORY_DIR = join(HERE, '..', '..', 'suminoe-read', 'cache', 'odds');
+
 const SCHEMA_VERSION = 1;
 const RACES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 /** 連続でこの回数失敗したら打ち切る（発売前は全レースが空なので、粘っても意味がない） */
@@ -136,6 +148,22 @@ async function main(): Promise<void> {
     process.exit(EXIT_NO_DATA);
   }
 
+  const payloadForHistory = {
+    schemaVersion: SCHEMA_VERSION,
+    date,
+    updatedAt: jstNow(),
+    races,
+  };
+
+  // 推移を残す。前回と同じ内容でも残す（「その時刻にこの値だった」が記録になる）。
+  // アプリ用の書き出しより先に行う。変化なしで早期に抜けても履歴は失わない
+  const historyDir = join(HISTORY_DIR, date.replaceAll('-', ''));
+  mkdirSync(historyDir, { recursive: true });
+  const stamp = payloadForHistory.updatedAt.slice(11, 16).replace(':', '');
+  const historyPath = join(historyDir, `${stamp}.json`);
+  writeFileSync(historyPath, JSON.stringify(payloadForHistory), 'utf8');
+  console.log(`  推移を保存: ${historyPath}`);
+
   const previous = existsSync(OUT_PATH)
     ? (JSON.parse(readFileSync(OUT_PATH, 'utf8')) as unknown)
     : null;
@@ -150,13 +178,7 @@ async function main(): Promise<void> {
     process.exit(EXIT_UNCHANGED);
   }
 
-  const payload = {
-    schemaVersion: SCHEMA_VERSION,
-    date,
-    updatedAt: jstNow(),
-    races,
-  };
-  const text = JSON.stringify(payload);
+  const text = JSON.stringify(payloadForHistory);
 
   writeFileSync(OUT_PATH, text, 'utf8');
   console.log(`  出力: ${OUT_PATH}`);

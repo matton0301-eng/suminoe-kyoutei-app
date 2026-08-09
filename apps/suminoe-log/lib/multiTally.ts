@@ -9,7 +9,6 @@
  * ここは純関数だけを置く。取得は {@link ./totalLoader}。
  */
 
-import { isHit } from './aggregate';
 import type { BetTypeKey } from './betting';
 import type { Verdict } from './raceCard';
 import type { BetTypeTally, DayTally, VerdictTally } from './tally';
@@ -29,10 +28,6 @@ export interface DaySummary {
   recoveryRate: number | null;
   /** 1号艇が1着だったレース数 */
   insideWon: number;
-  /** 自分の予想が的中した数。その日の記録が無ければ null */
-  predictionHit: number | null;
-  /** 予想と結果の両方が入っている記録の数。記録が無ければ null */
-  predictionTotal: number | null;
 }
 
 export interface MultiTally {
@@ -48,10 +43,6 @@ export interface MultiTally {
   insideWonRate: number | null;
   byBetType: TotalBetTypeTally[];
   byVerdict: VerdictTally[];
-  /** 通算の予想的中。記録が1件も無ければ null */
-  predictionHit: number | null;
-  predictionTotal: number | null;
-  predictionRate: number | null;
 }
 
 export interface DayInput {
@@ -68,16 +59,8 @@ function rate(part: number, whole: number): number | null {
   return whole > 0 ? (part / whole) * 100 : null;
 }
 
-/** 予想が入っている記録だけを母数にして的中を数える。記録が無ければ null */
-function countPrediction(logs: RaceLog[]): { hit: number; total: number } | null {
-  if (logs.length === 0) return null;
-  const judged = logs.map(isHit).filter((result): result is boolean => result !== null);
-  return { hit: judged.filter(Boolean).length, total: judged.length };
-}
-
 export function summarizeDay(input: DayInput): DaySummary | null {
   if (input.tally === null) return null;
-  const prediction = countPrediction(input.logs);
   return {
     date: input.date,
     racesFinished: input.tally.racesFinished,
@@ -86,8 +69,6 @@ export function summarizeDay(input: DayInput): DaySummary | null {
     balanceYen: input.tally.balanceYen,
     recoveryRate: input.tally.recoveryRate,
     insideWon: input.tally.insideWon,
-    predictionHit: prediction?.hit ?? null,
-    predictionTotal: prediction?.total ?? null,
   };
 }
 
@@ -175,16 +156,6 @@ export function aggregateDays(inputs: DayInput[]): MultiTally {
   const racesFinished = sum((day) => day.racesFinished);
   const insideWon = sum((day) => day.insideWon);
 
-  const daysWithLogs = days.filter((day) => day.predictionTotal !== null);
-  const predictionTotal =
-    daysWithLogs.length === 0
-      ? null
-      : daysWithLogs.reduce((total, day) => total + (day.predictionTotal ?? 0), 0);
-  const predictionHit =
-    daysWithLogs.length === 0
-      ? null
-      : daysWithLogs.reduce((total, day) => total + (day.predictionHit ?? 0), 0);
-
   return {
     days,
     totalDays: days.length,
@@ -197,9 +168,5 @@ export function aggregateDays(inputs: DayInput[]): MultiTally {
     insideWonRate: rate(insideWon, racesFinished),
     byBetType: mergeBetTypes(withResult),
     byVerdict: mergeVerdicts(withResult),
-    predictionHit,
-    predictionTotal,
-    predictionRate:
-      predictionHit === null || predictionTotal === null ? null : rate(predictionHit, predictionTotal),
   };
 }

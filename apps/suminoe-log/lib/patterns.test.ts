@@ -11,7 +11,7 @@ import { describe, it } from 'vitest';
 
 import type { BetSuggestion } from './betting';
 import type { RaceOddsData } from './odds';
-import { buildPatterns } from './patterns';
+import { buildPatterns, heatOf } from './patterns';
 import { buildProbabilities } from './probability';
 import type { BoatScore } from './betting';
 import type { Boat } from './types';
@@ -34,7 +34,6 @@ const SUGGESTION = {
   plans: [],
   actualWeight: 0,
   anchorNote: null,
-  tenjiFast: null,
 } as unknown as BetSuggestion;
 
 /** 市場の取り分（控除率25%） */
@@ -199,5 +198,31 @@ describe('期待値が低いとき', () => {
     const { steady } = patternsOf(fairOdds(1.5));
     assert.ok(steady.expectedValue! >= 1);
     assert.equal(steady.caution, null);
+  });
+});
+
+describe('期待度', () => {
+  it('的中率に応じて段が上がる', () => {
+    assert.equal(heatOf(0.05).level, 0, '低いうちは印を出さない');
+    assert.equal(heatOf(0.08).level, 1);
+    assert.equal(heatOf(0.15).level, 2);
+    assert.equal(heatOf(0.3).level, 3);
+    assert.equal(heatOf(0.45).level, 4);
+    assert.equal(heatOf(0.6).level, 5);
+    assert.equal(heatOf(0.95).level, 5, '上限は虹どまり');
+  });
+
+  it('言葉には必ず基準の的中率がある（煽りにしないため）', () => {
+    for (const p of [0.1, 0.2, 0.35, 0.5, 0.7]) {
+      const heat = heatOf(p);
+      assert.notEqual(heat.label, '');
+      assert.ok(heat.threshold > 0, `${heat.label} に基準がない`);
+      assert.ok(p >= heat.threshold, `${heat.label} の基準を満たしていない`);
+    }
+  });
+
+  it('境界のすぐ下では段が上がらない', () => {
+    assert.equal(heatOf(0.299).level, 2);
+    assert.equal(heatOf(0.599).level, 4);
   });
 });
