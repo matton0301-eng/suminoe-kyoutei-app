@@ -3,6 +3,7 @@
  */
 
 import { aggregate, formatRate, formatResult } from './aggregate';
+import { formatBet } from './bets';
 import { BASELINE_PERIOD } from './baseline';
 import { formatDateSlash } from './raceDate';
 import type { RaceLog } from './types';
@@ -60,6 +61,9 @@ export function toPlainText(logs: RaceLog[], date: string): string {
 
 const CSV_HEADER = [
   'race_no',
+  'bets',
+  'bet_yen',
+  'ken',
   'result_first',
   'result_second',
   'result_third',
@@ -87,6 +91,9 @@ export function toCsv(logs: RaceLog[]): string {
     rows.push(
       [
         cell(log.raceNo),
+        cell(log.bets.map((bet) => formatBet(bet)).join(' / ')),
+        cell(log.bets.reduce((sum, bet) => sum + bet.amountYen, 0) || null),
+        cell(log.ken ? '見' : null),
         cell(log.resultFirst),
         cell(log.resultSecond),
         cell(log.resultThird),

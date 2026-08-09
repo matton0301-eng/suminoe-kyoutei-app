@@ -7,12 +7,18 @@ export type Boat = 1 | 2 | 3 | 4 | 5 | 6;
 export type Kimarite = '逃げ' | 'まくり' | '差し' | 'まくり差し' | '抜き';
 export type Suimen = '静か' | 'ふつう' | '荒れてる';
 
+import type { Bet } from './bets';
+
 /** 結果の着順を指す。フォームの3行に対応する。 */
 export type ResultPlace = 'resultFirst' | 'resultSecond' | 'resultThird';
 
 export interface RaceLog {
   id: string;
   raceNo: number;
+  /** 買った舟券。空で ken=true なら「見（ケン）」 */
+  bets: Bet[];
+  /** 意図して買わなかった。未入力と区別する */
+  ken: boolean;
   resultFirst: Boat | null;
   resultSecond: Boat | null;
   resultThird: Boat | null;
@@ -31,6 +37,8 @@ export interface StoredData {
 /** 記録タブのフォーム状態。下書きとしてそのまま保存する。 */
 export interface FormState {
   raceNo: number;
+  bets: Bet[];
+  ken: boolean;
   resultFirst: Boat | null;
   resultSecond: Boat | null;
   resultThird: Boat | null;
@@ -72,6 +80,8 @@ export const SUIMEN_OPTIONS: readonly Suimen[] = ['静か', 'ふつう', '荒れ
 
 export const EMPTY_FORM: FormState = {
   raceNo: MIN_RACE_NO,
+  bets: [],
+  ken: false,
   resultFirst: null,
   resultSecond: null,
   resultThird: null,

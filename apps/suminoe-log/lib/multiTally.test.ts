@@ -27,6 +27,8 @@ function fakeLog(raceNo: number, _unused: Boat | null, resultFirst: Boat | null)
   return {
     id: `log-${raceNo}`,
     raceNo,
+    bets: [],
+    ken: false,
     resultFirst,
     resultSecond: null,
     resultThird: null,

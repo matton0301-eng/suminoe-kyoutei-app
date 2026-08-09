@@ -25,6 +25,7 @@ import { TabBar, type TabKey } from '@/components/TabBar';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Toast } from '@/components/Toast';
 import { aggregate } from '@/lib/aggregate';
+import { summarizeBets, type Bet } from '@/lib/bets';
 import { fetchArchiveDay, fetchArchiveIndex, mergeDayEntries, type DayEntry } from '@/lib/archive';
 import type { MultiTally } from '@/lib/multiTally';
 import { loadMultiTally } from '@/lib/totalLoader';
@@ -322,6 +323,45 @@ export default function Page() {
     }
   }, []);
 
+  /**
+   * 買い目タブで「買った」を押したときの記録。
+   *
+   * フォームを経由せずその場で保存する。現地では買ってすぐ次の操作に移るので、
+   * 「記録タブに移動して保存を押す」を挟むと取りこぼす。
+   * 同じレースに買い増したら、既存の記録に足す。
+   */
+  const handleBuy = useCallback(
+    (raceNo: number, bets: Bet[]) => {
+      const existing = logs.find((log) => log.raceNo === raceNo);
+      const next = existing
+        ? logs.map((log) =>
+            log.raceNo === raceNo
+              ? { ...log, bets: [...log.bets, ...bets], ken: false }
+              : log,
+          )
+        : [
+            ...logs,
+            {
+              id: createId(),
+              raceNo,
+              bets,
+              ken: false,
+              resultFirst: null,
+              resultSecond: null,
+              resultThird: null,
+              kimarite: null,
+              suimen: null,
+              memo: '',
+              savedAt: new Date().toISOString(),
+            },
+          ];
+      persist(next);
+      const total = bets.reduce((sum, bet) => sum + bet.amountYen, 0);
+      setToast(`${raceNo}R に ${bets.length}点（${total.toLocaleString('ja-JP')}円）を記録しました`);
+    },
+    [logs, persist],
+  );
+
   /** ヘッダーの日付タップ。先にモーダルを開いてから一覧を読む(体感を軽くする) */
   const openDayPicker = useCallback(async () => {
     setDayPickerOpen(true);
@@ -369,6 +409,18 @@ export default function Page() {
   const activeOdds = viewing ? (archiveView?.odds ?? null) : odds;
 
   const stats = useMemo(() => aggregate(activeLogs), [activeLogs]);
+
+  /**
+   * 自分が買った舟券の実収支。仮定の数字ではなく、買った金額と公式の払戻から出す。
+   * 結果がまだ出ていないレースは払戻に数えない（「まだ」と「外れ」を混ぜない）。
+   */
+  const myBets = useMemo(() => {
+    // **日付が一致する結果だけで精算する。** results.json は前日のものが
+    // 残っていることがあり、そのまま当てると別の日の着順で配当が出る
+    // （8/9 の購入に 8/8 の 1-4-6 を当てて「的中」と出た）
+    const sameDay = activeResults !== null && activeResults.date === activeDate;
+    return summarizeBets(activeLogs, sameDay ? activeResults.races : []);
+  }, [activeLogs, activeResults, activeDate]);
   const exportText = useMemo(() => toPlainText(activeLogs, activeDate), [activeLogs, activeDate]);
   const exportCsv = useMemo(() => toCsv(activeLogs), [activeLogs]);
 
@@ -514,6 +566,7 @@ export default function Page() {
             tenji={activeTenji}
             odds={activeOdds}
             calibration={calibration}
+            onBuy={viewing ? undefined : handleBuy}
             focusRaceNo={form.raceNo}
             onImport={handleImportCard}
             onClearCard={handleClearCard}
@@ -526,6 +579,7 @@ export default function Page() {
 
         {tab === 'tally' ? (
           <TallyTab
+            myBets={myBets}
             tally={tally}
             hasCard={activeCard !== null}
             total={total}

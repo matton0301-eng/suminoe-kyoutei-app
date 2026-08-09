@@ -13,6 +13,7 @@
 import { useState } from 'react';
 
 import { Balance, Disclaimer, Rate } from '@/components/TallyParts';
+import type { BetsSummary } from '@/lib/bets';
 import { TotalTallyView } from '@/components/TotalTallyView';
 import type { MultiTally } from '@/lib/multiTally';
 import { formatYen } from '@/lib/review';
@@ -23,6 +24,8 @@ type Mode = 'day' | 'total';
 
 interface TallyTabProps {
   tally: DayTally | null;
+  /** 自分が実際に買った舟券の集計。買っていなければ投資0で返る */
+  myBets: BetsSummary;
   /** 出走表があるか（無ければ取り込みを促す） */
   hasCard: boolean;
   /** 通算データ。まだ読み込んでいなければ null */
@@ -55,6 +58,7 @@ function OrderMini({ order }: { order: Boat[] }) {
 
 export function TallyTab({
   tally,
+  myBets,
   hasCard,
   total,
   totalLoading,
@@ -91,7 +95,7 @@ export function TallyTab({
       </div>
 
       {mode === 'day' ? (
-        <DayView tally={tally} hasCard={hasCard} />
+        <DayView tally={tally} myBets={myBets} hasCard={hasCard} />
       ) : (
         <TotalTallyView total={total} loading={totalLoading} error={totalError} />
       )}
@@ -99,7 +103,15 @@ export function TallyTab({
   );
 }
 
-function DayView({ tally, hasCard }: { tally: DayTally | null; hasCard: boolean }) {
+function DayView({
+  tally,
+  myBets,
+  hasCard,
+}: {
+  tally: DayTally | null;
+  myBets: BetsSummary;
+  hasCard: boolean;
+}) {
   if (!hasCard) {
     return (
       <section className="rounded-xl border border-line bg-bg-panel p-4">
@@ -114,7 +126,8 @@ function DayView({ tally, hasCard }: { tally: DayTally | null; hasCard: boolean 
   if (!tally) {
     return (
       <>
-        <section className="rounded-xl border border-line bg-bg-panel p-4">
+        <MyBetsView summary={myBets} />
+        <section className="border border-line bg-bg-panel p-4">
           <h2 className="text-base font-bold text-text-main">まだ結果が出ていません</h2>
           <p className="mt-1 text-sm text-text-mute">
             全レースが終わると結果が確定します（住之江のナイターは21時頃）。
@@ -128,8 +141,10 @@ function DayView({ tally, hasCard }: { tally: DayTally | null; hasCard: boolean 
 
   return (
     <>
+      <MyBetsView summary={myBets} />
+
       {/* 全体 */}
-      <section className="rounded-xl border border-accent bg-bg-panel p-4">
+      <section className="border border-accent bg-bg-panel p-4">
         <div className="rule-start">
           <h2 className="text-[13px] font-bold tracking-wide text-text-main">{tally.date} の収支</h2>
           <p className="mt-0.5 text-[11px] text-text-mute">
@@ -321,5 +336,123 @@ function DayView({ tally, hasCard }: { tally: DayTally | null; hasCard: boolean 
 
       <Disclaimer />
     </>
+  );
+}
+
+/**
+ * 自分が実際に買った舟券の収支。
+ *
+ * **ここだけは仮定の数字ではない。** 買った金額と、公式の払戻から出した実額。
+ * 当たったレースは大きく見せる（現地で見返して楽しいことが目的）が、
+ * 収支そのものは良くも悪くもそのまま出す。マイナスを小さく見せない。
+ */
+function MyBetsView({ summary }: { summary: BetsSummary }) {
+  if (summary.investedYen === 0 && summary.kenRaces === 0) {
+    return (
+      <section className="border border-line bg-bg-panel p-3">
+        <h2 className="paper-heading text-xs">自分の収支</h2>
+        <p className="mt-2 text-sm text-text-mute">
+          まだ舟券を記録していません。買い目タブで「この◯点を買った」を押すと、ここに実額が出ます。
+        </p>
+      </section>
+    );
+  }
+
+  const plus = summary.balanceYen > 0;
+  const settledRaces = summary.races.filter((race) => race.settled);
+  const bestHit = summary.races
+    .flatMap((race) => race.hits.map((hit) => ({ raceNo: race.raceNo, ...hit })))
+    .reduce<null | { raceNo: number; combo: Boat[]; returnedYen: number }>(
+      (top, hit) => (top === null || hit.returnedYen > top.returnedYen ? hit : top),
+      null,
+    );
+
+  return (
+    <section className={`border p-3 ${plus ? 'border-accent' : 'border-line'} bg-bg-panel`}>
+      <div className="flex items-baseline justify-between">
+        <h2 className="paper-heading text-xs">自分の収支</h2>
+        <span className="tnum text-[11px] text-text-mute">
+          買い {summary.betRaces}R / 見 {summary.kenRaces}R
+        </span>
+      </div>
+
+      <p className="mt-2 flex items-baseline gap-2">
+        <span className="text-xs text-text-mute">収支</span>
+        <span
+          className={[
+            'tnum text-3xl font-black',
+            plus ? 'heat-text-3' : 'text-text-main',
+          ].join(' ')}
+        >
+          {plus ? '+' : ''}
+          {formatYen(summary.balanceYen)}
+        </span>
+      </p>
+
+      <p className="tnum mt-1 text-xs text-text-mute">
+        投資 {formatYen(summary.investedYen)} / 払戻{' '}
+        <strong className="text-text-main">{formatYen(summary.returnedYen)}</strong>
+        {summary.recoveryRate !== null ? (
+          <>
+            {' '}
+            / 回収率 <Rate value={summary.recoveryRate} />
+          </>
+        ) : null}
+      </p>
+
+      {summary.pendingRaces > 0 ? (
+        <p className="mt-1 text-xs text-text-mute">
+          <span className="heat-text-1 font-bold">結果待ち {summary.pendingRaces}R</span>
+          <span>（レースが終わると配当が入ります）</span>
+        </p>
+      ) : null}
+
+      {summary.hitRaces > 0 ? (
+        <p className="mt-1 text-xs">
+          <span className="heat-text-3 font-black">的中 {summary.hitRaces}R</span>
+          <span className="text-text-mute">
+            {' '}
+            / 結果が出た {settledRaces.length}R 中
+          </span>
+        </p>
+      ) : null}
+
+      {bestHit ? (
+        <p className="mt-2 border-t border-line pt-2 text-xs text-text-main">
+          最高配当{' '}
+          <span className="tnum heat-text-4 text-lg font-black">
+            {formatYen(bestHit.returnedYen)}
+          </span>{' '}
+          <span className="tnum text-text-mute">
+            （{bestHit.raceNo}R {bestHit.combo.join('-')}）
+          </span>
+        </p>
+      ) : null}
+
+      {/* レースごとの明細。あとで見返したときに何を買ったか分かるように残す */}
+      {summary.races.length > 0 ? (
+        <ul className="mt-2 space-y-1 border-t border-line pt-2">
+          {summary.races
+            .filter((race) => race.investedYen > 0)
+            .map((race) => (
+              <li key={race.raceNo} className="tnum flex items-baseline gap-2 text-[11px]">
+                <span className="w-8 font-bold text-text-main">{race.raceNo}R</span>
+                <span className="text-text-mute">{formatYen(race.investedYen)}</span>
+                <span className="ml-auto">
+                  {!race.settled ? (
+                    <span className="text-text-mute">結果待ち</span>
+                  ) : race.hits.length > 0 ? (
+                    <span className="heat-text-3 font-black">
+                      +{formatYen(race.returnedYen)}
+                    </span>
+                  ) : (
+                    <span className="text-text-mute">はずれ</span>
+                  )}
+                </span>
+              </li>
+            ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }

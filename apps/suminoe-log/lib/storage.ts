@@ -11,8 +11,10 @@
  * 詳細は `lib/raceDate.ts`。
  */
 
+import type { Bet } from './bets';
 import { CARD_KEY, RESULTS_KEY, draftKey, isoFromCompact, logsKey } from './raceDate';
-import { EMPTY_FORM, type FormState, type RaceLog, type StoredData } from './types';
+import type { PayoutKey } from './results';
+import { EMPTY_FORM, type Boat, type FormState, type RaceLog, type StoredData } from './types';
 
 export interface LoadResult {
   logs: RaceLog[];
@@ -72,6 +74,41 @@ function isBoatLike(value: unknown): boolean {
   return value === null || (typeof value === 'number' && value >= 1 && value <= 6);
 }
 
+/**
+ * 買った舟券。**金額が入るので特に厳しく見る。**
+ * 1点でも形が崩れていたらその点を捨てる（記録全体は捨てない）。
+ */
+const BET_TYPE_KEYS: ReadonlySet<PayoutKey> = new Set<PayoutKey>([
+  'trifecta',
+  'trio',
+  'exacta',
+  'quinella',
+  'wide',
+  'win',
+  'place',
+]);
+
+function sanitizeBets(raw: unknown): Bet[] {
+  if (!Array.isArray(raw)) return [];
+  const bets: Bet[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    if (!BET_TYPE_KEYS.has(record.betType as PayoutKey)) continue;
+    if (!Array.isArray(record.combo)) continue;
+    const combo = record.combo.filter(
+      (value): value is Boat =>
+        typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 6,
+    );
+    if (combo.length !== record.combo.length || combo.length === 0) continue;
+    const amountYen = record.amountYen;
+    // 金額は正の整数だけ。小数や負の値が入り込むと収支が壊れる
+    if (typeof amountYen !== 'number' || !Number.isInteger(amountYen) || amountYen <= 0) continue;
+    bets.push({ betType: record.betType as PayoutKey, combo, amountYen });
+  }
+  return bets;
+}
+
 /** 外から来たデータは信用しない。形が合わない要素は捨てる。 */
 function sanitizeLog(raw: unknown): RaceLog | null {
   if (typeof raw !== 'object' || raw === null) return null;
@@ -89,6 +126,8 @@ function sanitizeLog(raw: unknown): RaceLog | null {
   return {
     id: record.id,
     raceNo: record.raceNo,
+    bets: sanitizeBets(record.bets),
+    ken: record.ken === true,
     resultFirst: record.resultFirst as RaceLog['resultFirst'],
     resultSecond: record.resultSecond as RaceLog['resultSecond'],
     resultThird: record.resultThird as RaceLog['resultThird'],

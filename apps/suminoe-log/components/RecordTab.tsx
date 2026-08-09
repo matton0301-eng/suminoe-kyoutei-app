@@ -11,6 +11,7 @@
 import { useState, type Dispatch } from 'react';
 
 import { formatResult } from '@/lib/aggregate';
+import { betKey, formatBet, formatYen } from '@/lib/bets';
 import type { FormAction } from '@/lib/formReducer';
 import type { CardRace } from '@/lib/raceCard';
 import {
@@ -172,7 +173,62 @@ export function RecordTab({
         )}
       </section>
 
-      {/* ② 結果（2着・3着は折りたたむ） */}
+      {/* ② 買った舟券 */}
+      <Section
+        title="買った舟券"
+        hint="買い目タブの「この◯点を買った」で入ります"
+      >
+        {form.bets.length === 0 ? (
+          <p className="pb-1 text-xs text-text-mute">
+            {form.ken
+              ? 'このレースは見（ケン）で記録します。'
+              : 'まだ記録がありません。買わずに見るなら下の「見（ケン）」を押してください。'}
+          </p>
+        ) : (
+          <ul className="space-y-1 pb-1">
+            {form.bets.map((bet, index) => (
+              <li
+                key={`${betKey(bet)}-${index}`}
+                className="flex items-baseline gap-2 border border-line bg-bg-raised px-2 py-1"
+              >
+                <span className="tnum text-sm font-bold text-text-main">{formatBet(bet)}</span>
+                <span className="tnum ml-auto text-xs text-text-mute">
+                  {formatYen(bet.amountYen)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: 'removeBet', index })}
+                  aria-label={`${formatBet(bet)} を消す`}
+                  className="min-h-9 px-2 text-xs text-text-mute underline"
+                >
+                  消す
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex items-baseline gap-2 pb-1">
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'toggleKen' })}
+            aria-pressed={form.ken}
+            className={[
+              'min-h-11 border px-3 text-sm font-bold',
+              form.ken ? 'on-accent border-accent bg-accent' : 'border-line text-text-mute',
+            ].join(' ')}
+          >
+            見（ケン）
+          </button>
+          {form.bets.length > 0 ? (
+            <span className="tnum ml-auto text-sm text-text-main">
+              計 {formatYen(form.bets.reduce((sum, bet) => sum + bet.amountYen, 0))}
+            </span>
+          ) : null}
+        </div>
+      </Section>
+
+      {/* ③ 結果（2着・3着は折りたたむ） */}
       <Section title="結果" hint="同じ艇を選び直すと、前の行から自動で外れます">
         <BoatPicker
           label="結果 1着"

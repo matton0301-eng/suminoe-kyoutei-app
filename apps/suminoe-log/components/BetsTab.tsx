@@ -20,6 +20,7 @@ import {
   type TenjiDay,
   type TenjiRace,
 } from '@/lib/beforeInfo';
+import { formatYen, type Bet } from '@/lib/bets';
 import { ORDERED_KEYS, buildSuggestion, formatTicket, type BetPlan } from '@/lib/betting';
 import { COURSE_FIRST_RATE } from '@/lib/baseline';
 import type { Calibration } from '@/lib/calibration';
@@ -60,6 +61,8 @@ interface BetsTabProps {
   onImport: (raw: string) => void;
   onClearCard: () => void;
   importError: string | null;
+  /** 買った舟券を記録する。過去日の閲覧中は渡さない */
+  onBuy?: (raceNo: number, bets: Bet[]) => void;
   /** 過去日の閲覧中。取り込み・クリアなどの操作を出さない */
   readOnly?: boolean;
 }
@@ -76,9 +79,12 @@ export function BetsTab({
   onImport,
   onClearCard,
   importError,
+  onBuy,
   readOnly = false,
 }: BetsTabProps) {
   const [pasted, setPasted] = useState('');
+  /** 「買った」を押したときの1点あたりの金額。現地で変えるので state で持つ */
+  const [unitYen, setUnitYen] = useState(100);
   const [selectedRaceNo, setSelectedRaceNo] = useState<number>(focusRaceNo);
 
   /**
@@ -436,8 +442,46 @@ export function BetsTab({
                 : 'オッズ未取得'}
             </span>
           </div>
+          {onBuy && !readOnly ? (
+            <div className="flex items-center gap-1.5 border border-line bg-bg-panel px-2 py-1.5">
+              <span className="text-[11px] text-text-mute">1点</span>
+              {[100, 200, 500, 1000].map((yen) => (
+                <button
+                  key={yen}
+                  type="button"
+                  onClick={() => setUnitYen(yen)}
+                  aria-pressed={unitYen === yen}
+                  className={[
+                    'tnum min-h-9 flex-1 border px-1 text-xs font-bold',
+                    unitYen === yen
+                      ? 'on-accent border-accent bg-accent'
+                      : 'border-line text-text-mute',
+                  ].join(' ')}
+                >
+                  {yen}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {patterns.map((pattern) => (
-            <PatternCard key={pattern.key} pattern={pattern} />
+            <PatternCard
+              key={pattern.key}
+              pattern={pattern}
+              unitYen={unitYen}
+              onBuy={
+                onBuy && !readOnly
+                  ? () =>
+                      onBuy(
+                        race.raceNo,
+                        pattern.tickets.map((ticket) => ({
+                          betType: pattern.betTypeName === '3連単' ? 'trifecta' : 'trio',
+                          combo: ticket.boats,
+                          amountYen: unitYen,
+                        })),
+                      )
+                  : undefined
+              }
+            />
           ))}
           <CalibrationNote calibration={calibration} hasOdds={raceOdds !== null} />
         </section>
@@ -616,7 +660,15 @@ function RaceCardTable({
 /** 期待値がこれ以上なら「モデル上は割に合う」 */
 const BREAK_EVEN = 1;
 
-function PatternCard({ pattern }: { pattern: BetPattern }) {
+function PatternCard({
+  pattern,
+  unitYen,
+  onBuy,
+}: {
+  pattern: BetPattern;
+  unitYen: number;
+  onBuy?: () => void;
+}) {
   const worthwhile = pattern.expectedValue !== null && pattern.expectedValue >= BREAK_EVEN;
   const empty = pattern.points === 0;
   const heat = heatOf(pattern.hitProbability, pattern.betTypeName);
@@ -708,6 +760,16 @@ function PatternCard({ pattern }: { pattern: BetPattern }) {
       <p className="mt-1 text-[11px] text-text-mute">{pattern.reason}</p>
       {pattern.caution ? (
         <p className="mt-1 text-[11px] text-accent">※ {pattern.caution}</p>
+      ) : null}
+
+      {onBuy && !empty ? (
+        <button
+          type="button"
+          onClick={onBuy}
+          className="on-accent mt-2 min-h-11 w-full bg-accent text-sm font-black"
+        >
+          この{pattern.points}点を買った（{formatYen(unitYen * pattern.points)}）
+        </button>
       ) : null}
     </section>
   );

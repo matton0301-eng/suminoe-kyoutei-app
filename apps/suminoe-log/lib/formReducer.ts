@@ -4,6 +4,7 @@
  * すべて新しいオブジェクトを返す（既存の state を書き換えない）。
  */
 
+import { betKey, type Bet } from './bets';
 import {
   EMPTY_FORM,
   MAX_RACE_NO,
@@ -20,6 +21,9 @@ import {
 export type FormAction =
   | { type: 'stepRaceNo'; delta: number }
   | { type: 'setResult'; place: ResultPlace; boat: Boat }
+  | { type: 'addBets'; bets: Bet[] }
+  | { type: 'removeBet'; index: number }
+  | { type: 'toggleKen' }
   | { type: 'toggleKimarite'; value: Kimarite }
   | { type: 'toggleSuimen'; value: Suimen }
   | { type: 'setMemo'; value: string }
@@ -59,6 +63,22 @@ export function formReducer(state: FormState, action: FormAction): FormState {
     case 'setResult':
       return assignResult(state, action.place, action.boat);
 
+    case 'addBets': {
+      // 同じ買い目を二重に足さない（買い増しは金額を変えて記録する）
+      const existing = new Set(state.bets.map(betKey));
+      const added = action.bets.filter((bet) => !existing.has(betKey(bet)));
+      return { ...state, bets: [...state.bets, ...added], ken: false };
+    }
+
+    case 'removeBet':
+      return { ...state, bets: state.bets.filter((_, index) => index !== action.index) };
+
+    case 'toggleKen':
+      // 見送ると決めたら買い目は残さない（記録の意味が食い違う）
+      return state.ken
+        ? { ...state, ken: false }
+        : { ...state, ken: true, bets: [] };
+
     case 'toggleKimarite':
       return { ...state, kimarite: state.kimarite === action.value ? null : action.value };
 
@@ -74,6 +94,8 @@ export function formReducer(state: FormState, action: FormAction): FormState {
     case 'loadForEdit':
       return {
         raceNo: action.log.raceNo,
+        bets: action.log.bets,
+        ken: action.log.ken,
         resultFirst: action.log.resultFirst,
         resultSecond: action.log.resultSecond,
         resultThird: action.log.resultThird,
@@ -98,6 +120,8 @@ export function toRaceLog(form: FormState, id: string): RaceLog {
   return {
     id,
     raceNo: form.raceNo,
+    bets: form.bets,
+    ken: form.ken,
     resultFirst: form.resultFirst,
     resultSecond: form.resultSecond,
     resultThird: form.resultThird,
