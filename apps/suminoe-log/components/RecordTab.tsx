@@ -8,7 +8,7 @@
  * （住之江＝静水面の聖地。デザイン方針は globals.css の冒頭を参照）。
  */
 
-import { useState, type Dispatch } from 'react';
+import type { Dispatch } from 'react';
 
 import { formatResult } from '@/lib/aggregate';
 import { betKey, formatYen, hitsByOrder } from '@/lib/bets';
@@ -16,19 +16,10 @@ import { ticketState } from '@/lib/ticketState';
 import type { ResultRace } from '@/lib/results';
 import type { FormAction } from '@/lib/formReducer';
 import type { CardRace } from '@/lib/raceCard';
-import {
-  KIMARITE_OPTIONS,
-  MAX_RACE_NO,
-  MIN_RACE_NO,
-  RESULT_PLACES,
-  SUIMEN_OPTIONS,
-  type FormState,
-  type RaceLog,
-} from '@/lib/types';
+import { MAX_RACE_NO, MIN_RACE_NO, type FormState, type RaceLog } from '@/lib/types';
 
 import { BetBuilder } from './BetBuilder';
 import { TicketCard } from './TicketCard';
-import { BoatPicker } from './BoatPicker';
 
 interface RecordTabProps {
   form: FormState;
@@ -87,20 +78,6 @@ export function RecordTab({
 }: RecordTabProps) {
   const isEditing = form.editingId !== null;
 
-  /**
-   * 結果の2着・3着は折りたたむ。1着だけで保存する場面が多く、
-   * 3行を開いたままだと保存ボタンまでのスクロールが1画面ぶん増える。
-   *
-   * 開いているかは state ではなく**派生値**で決める。
-   * 1着か下位着が入っていれば開く（続けて入れる流れになる）。
-   * それ以外は「2着・3着も入れる」を押したかどうか。
-   */
-  const [openedByUser, setOpenedByUser] = useState(false);
-  const resultExpanded =
-    openedByUser ||
-    form.resultFirst !== null ||
-    form.resultSecond !== null ||
-    form.resultThird !== null;
   const raceLabel = (
     <>
       {form.raceNo}
@@ -252,111 +229,13 @@ export function RecordTab({
         ) : null}
       </Section>
 
-      {/* ③ 結果（2着・3着は折りたたむ） */}
-      <Section title="結果" hint="同じ艇を選び直すと、前の行から自動で外れます">
-        <BoatPicker
-          label="結果 1着"
-          rowLabel="1着"
-          selected={form.resultFirst}
-          onSelect={(boat) => dispatch({ type: 'setResult', place: 'resultFirst', boat })}
-        />
-
-        {resultExpanded ? (
-          RESULT_PLACES.filter(({ key }) => key !== 'resultFirst').map(({ key, label }) => (
-            <BoatPicker
-              key={key}
-              label={`結果 ${label}`}
-              rowLabel={label}
-              selected={form[key]}
-              onSelect={(boat) => dispatch({ type: 'setResult', place: key, boat })}
-            />
-          ))
-        ) : (
-          <button
-            type="button"
-            onClick={() => setOpenedByUser(true)}
-            className="min-h-12 w-full rounded-lg border border-line bg-bg-raised/40 text-sm font-bold text-text-mute"
-          >
-            2着・3着も入れる
-          </button>
-        )}
-      </Section>
-
-      {/* ⑤ 決まり手 */}
-      <Section title="1着はどう決まった？">
-        <div className="grid grid-cols-3 gap-2">
-          {KIMARITE_OPTIONS.map(({ value, hint }) => {
-            const isSelected = form.kimarite === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={isSelected}
-                onClick={() => dispatch({ type: 'toggleKimarite', value })}
-                className={[
-                  'min-h-16 rounded-lg border px-2 py-2 text-left',
-                  'transition-transform duration-100 motion-reduce:transition-none',
-                  isSelected
-                    ? 'scale-[1.03] border-accent bg-bg-raised'
-                    : 'border-line bg-bg-raised/50',
-                ].join(' ')}
-              >
-                <span
-                  className={[
-                    'block text-sm font-bold',
-                    isSelected ? 'text-accent' : 'text-text-main',
-                  ].join(' ')}
-                >
-                  {value}
-                </span>
-                <span className="mt-0.5 block text-[11px] leading-tight text-text-mute">
-                  {hint}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </Section>
-
-      {/* ⑥ 水面のメモ */}
       {/*
-        元仕様の補足文は「2マークで艇が暴れてたか」だったが、競艇を知らないと
-        2マークがどこか分からず判断できない。見たままで答えられる表現に変えた。
+        着順・決まり手・水面の手入力は外した（2026-08-10）。
+        **公式のレース結果ページから、レース直後に全部取れる。**
+        着順も決まり手も波高も、手で入れる理由が無くなった
+        （`tools/suminoe-mcp/scripts/fetch-live-results.ts` が15分おきに取り込む）。
+        残したのは「買った舟券」と「気づいたこと」だけ。自分にしか書けないものだけを残す。
       */}
-      <Section title="水面のメモ（任意）" hint="ターンで艇が波に跳ねたり流れたりしていたか">
-        <div className="flex gap-2">
-          {SUIMEN_OPTIONS.map((value) => {
-            const isSelected = form.suimen === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={isSelected}
-                onClick={() => dispatch({ type: 'toggleSuimen', value })}
-                className={[
-                  'min-h-14 flex-1 rounded-lg border text-base font-bold',
-                  'transition-transform duration-100 motion-reduce:transition-none',
-                  isSelected
-                    ? 'scale-[1.03] border-accent bg-bg-raised text-accent'
-                    : 'border-line bg-bg-raised/50 text-text-mute',
-                ].join(' ')}
-              >
-                {value}
-              </button>
-            );
-          })}
-        </div>
-        <label className="block">
-          <span className="sr-only">気づいたこと</span>
-          <input
-            type="text"
-            value={form.memo}
-            onChange={(event) => dispatch({ type: 'setMemo', value: event.target.value })}
-            placeholder="気づいたこと"
-            className="min-h-14 w-full rounded-lg border border-line bg-bg-raised px-3 text-base text-text-main placeholder:text-text-mute"
-          />
-        </label>
-      </Section>
 
       {/* ⑧ 直前の記録 */}
       {lastLog ? (

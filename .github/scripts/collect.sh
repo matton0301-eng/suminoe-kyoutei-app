@@ -75,6 +75,9 @@ case "$JOB" in
     # 直前情報（展示タイム）とオッズ。レースごとに順次公開される
     (cd "$READ_DIR" && run python beforeinfo.py --date "$TARGET_DATE")
     run "$TSX" "$MCP_SCRIPTS/fetch-odds.ts" --date "$TARGET_DATE"
+    # 終わったレースの結果。**競走成績のファイルは全レース終了後にしか出ない**ので、
+    # レース結果ページから1レースずつ拾う。これで当日中に的中と配当が分かる
+    run "$TSX" "$MCP_SCRIPTS/fetch-live-results.ts" --date "$TARGET_DATE"
     ;;
 
   review)
