@@ -194,7 +194,7 @@ export function RecordTab({
         title="買った舟券"
         hint="券種を選び、艇を押して組みます。買い目タブの「この◯点を買った」でも入ります"
       >
-        {!form.ken ? <BetBuilder onAdd={(bet) => dispatch({ type: 'addBets', bets: [bet] })} /> : null}
+        {!form.ken ? <BetBuilder onAdd={(bets) => dispatch({ type: 'addBets', bets })} /> : null}
 
         {form.bets.length === 0 ? (
           <p className="pb-1 text-xs text-text-mute">

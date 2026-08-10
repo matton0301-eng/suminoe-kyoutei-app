@@ -206,3 +206,45 @@ export function expandFormation(rows: Map<number, Boat[]>, spec: BetTypeSpec): B
   }
   return unique;
 }
+
+/* ────────────────────────────────────────────
+   買い方（通常 / ボックス / フォーメーション）
+   ──────────────────────────────────────────── */
+
+export type BuyStyle = 'normal' | 'box' | 'formation';
+
+export interface BuyStyleSpec {
+  key: BuyStyle;
+  label: string;
+  hint: string;
+}
+
+export const BUY_STYLES: readonly BuyStyleSpec[] = [
+  { key: 'normal', label: '通常', hint: '買い目を1点ずつ' },
+  { key: 'box', label: 'ボックス', hint: '選んだ艇の全通り' },
+  { key: 'formation', label: 'フォーメーション', hint: '着ごとに候補を選ぶ' },
+];
+
+/**
+ * 単勝・複勝にボックスとフォーメーションは無い。
+ * 1艇しか選ばない賭式なので、全通りも着ごとの候補も意味を持たない。
+ */
+export function stylesFor(spec: BetTypeSpec): readonly BuyStyleSpec[] {
+  return spec.size === 1 ? BUY_STYLES.slice(0, 1) : BUY_STYLES;
+}
+
+/** 複数選択の入り／切り。ボックスの艇、フォーメーションの各着で使う */
+export function toggleInList(list: Boat[], boat: Boat): Boat[] {
+  return list.includes(boat) ? list.filter((entry) => entry !== boat) : [...list, boat];
+}
+
+/** フォーメーションの選択（着ごとの候補）。要素数は賭式の艇数に合わせる */
+export type FormationPicks = Boat[][];
+
+export function emptyFormation(spec: BetTypeSpec): FormationPicks {
+  return Array.from({ length: spec.size }, () => []);
+}
+
+export function formationRows(picks: FormationPicks): Map<number, Boat[]> {
+  return new Map(picks.map((boats, index) => [index + 1, boats]));
+}
