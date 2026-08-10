@@ -29,7 +29,8 @@ import { TabBar, type TabKey } from '@/components/TabBar';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Toast } from '@/components/Toast';
 import { aggregate } from '@/lib/aggregate';
-import { hitsByOrder, summarizeBets, type Bet } from '@/lib/bets';
+import { summarizeBets, type Bet } from '@/lib/bets';
+import { findCelebration } from '@/lib/celebration';
 import { fetchArchiveDay, fetchArchiveIndex, mergeDayEntries, type DayEntry } from '@/lib/archive';
 import type { MultiTally } from '@/lib/multiTally';
 import { loadMultiTally } from '@/lib/totalLoader';
@@ -96,10 +97,14 @@ export default function Page() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   /** 的中の演出。保存した瞬間に当たっていれば流す */
-  const [celebration, setCelebration] = useState<{ hits: Bet[]; token: number }>({
-    hits: [],
-    token: 0,
-  });
+  const [celebration, setCelebration] = useState<{
+    hits: Bet[];
+    multiples: (number | null)[];
+    returnedYen: number | null;
+    token: number;
+  }>({ hits: [], multiples: [], returnedYen: null, token: 0 });
+  /** 演出を出したレース。同じレースで二度出さない */
+  const [celebrated, setCelebrated] = useState<Set<string>>(() => new Set());
   /** 締切までの残り時間を出すための現在時刻。1分ごとに進める */
   const [now, setNow] = useState<Date | null>(null);
   /** 起動時の自動選択を一度だけ行うためのフラグ */
@@ -317,14 +322,9 @@ export default function Page() {
   );
 
   const commit = useCallback(() => {
-    const { next, isUpdate, bets } = foldIntoLogs(form, logs);
-
-    // 当たっていれば祝う。公式の払戻はまだ来ていないので、入力した着順だけで判定する
-    const hits = hitsByOrder(bets, [form.resultFirst, form.resultSecond, form.resultThird]);
-    if (hits.length > 0) {
-      setCelebration((current) => ({ hits, token: current.token + 1 }));
-    }
-
+    const { next, isUpdate } = foldIntoLogs(form, logs);
+    // 的中の演出はここでは出さない。着順の手入力を外したので、
+    // 保存の瞬間には当たりが分からない（結果が入った時点で `findCelebration` が拾う）
     persist(next);
     setToast(`${form.raceNo}R を${isUpdate ? '修正' : '記録'}しました`);
     dispatch({ type: 'reset', raceNo: nextRaceNo(form.raceNo) });
@@ -568,6 +568,32 @@ export default function Page() {
     [raceCard, form.raceNo],
   );
 
+  /**
+   * 結果が入ったら祝う。
+   *
+   * **着順の手入力を外したので、保存の瞬間には当たりが分からない。**
+   * 結果は15分おきの収集で自動的に入るので、入った時点で出す。
+   *
+   * 判定は `lib/celebration.ts`。ここでは effect ではなく
+   * レンダー中に同期する（React が推奨する形。この画面の他の箇所と揃えてある）。
+   */
+  const pendingCelebration = useMemo(
+    () => findCelebration(activeResults, activeDate, activeLogs, celebrated),
+    [activeResults, activeDate, activeLogs, celebrated],
+  );
+  if (pendingCelebration) {
+    setCelebrated((current) => new Set(current).add(pendingCelebration.key));
+    // 外れたレースも「見終わった」として記録するが、演出は出さない
+    if (pendingCelebration.hits.length > 0) {
+      setCelebration((current) => ({
+        hits: pendingCelebration.hits,
+        multiples: pendingCelebration.multiples,
+        returnedYen: pendingCelebration.returnedYen,
+        token: current.token + 1,
+      }));
+    }
+  }
+
   /** 次の開催日と、そこまでの日数。開催が無い日の案内に使う */
   const nextRaceDay = useMemo(() => nextRaceDayFrom(calendar, todayIso()), [calendar]);
   const daysUntilNext = useMemo(
@@ -808,9 +834,10 @@ export default function Page() {
 
       <HitCelebration
         hits={celebration.hits}
-        multiples={celebration.hits.map(() => null)}
+        multiples={celebration.multiples}
+        returnedYen={celebration.returnedYen}
         token={celebration.token}
-        onDone={() => setCelebration({ hits: [], token: 0 })}
+        onDone={() => setCelebration((current) => ({ ...current, hits: [] }))}
       />
 
       <TabBar active={tab} onChange={setTab} />
