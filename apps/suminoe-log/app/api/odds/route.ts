@@ -17,6 +17,13 @@ import { NextResponse } from 'next/server';
 
 import { fetchOdds, type OddsBetType } from '@/lib/server/oddsSource';
 
+/**
+ * **東京で動かす。**
+ * 既定（米国東部）だと公式サイトまで太平洋を往復し、1レース取るのに12秒かかった。
+ * 手元（日本）から直接叩けば2秒なので、遅さのほぼ全部が距離によるもの。
+ */
+export const preferredRegion = ['hnd1'];
+
 /** 何秒キャッシュするか。オッズは締切直前まで動くので短く */
 const CACHE_SECONDS = 30;
 
