@@ -45,6 +45,7 @@ import { formatDateLabel, todayIso } from '@/lib/raceDate';
 import { fetchArchiveTenji, fetchBeforeInfo, type TenjiDay } from '@/lib/beforeInfo';
 import { fetchCalibration, type Calibration } from '@/lib/calibration';
 import { fetchSchedule, type Schedule } from '@/lib/calendar';
+import { fetchLensRecord, type LensRecord } from '@/lib/lenses';
 import { fetchArchiveOdds, fetchOddsDay, formatFetchedAt, type OddsDay } from '@/lib/odds';
 import { fetchResults, type ResultDay } from '@/lib/results';
 import { formatMinutesLeft, isUrgent, minutesUntil, resolveSchedule } from '@/lib/schedule';
@@ -88,6 +89,8 @@ export default function Page() {
    * 当日のレース進行を表す `schedule`（下の useMemo）とは別物なので名前を分ける。
    */
   const [calendar, setCalendar] = useState<Schedule | null>(null);
+  /** 視点ごとの実測（743レースで測定）。買い目タブの5視点に添える */
+  const [lensRecord, setLensRecord] = useState<LensRecord | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   /** 的中の演出。保存した瞬間に当たっていれば流す */
   const [celebration, setCelebration] = useState<{ hits: Bet[]; token: number }>({
@@ -199,6 +202,11 @@ export default function Page() {
     /** オッズ。発売前は空で返る */
     void fetchOddsDay().then((fetched) => {
       if (fetched) setOdds(fetched);
+    });
+
+    /** 視点ごとの実測。過去データで測ったもので、当日は変わらない */
+    void fetchLensRecord().then((fetched) => {
+      if (fetched) setLensRecord(fetched);
     });
 
     /** 開催予定（どの日に開催があるか）。次の開催日の表示に使う */
@@ -666,6 +674,7 @@ export default function Page() {
             resultCount={stats.resultCount}
             results={activeResults}
             tenji={activeTenji}
+            lensRecord={lensRecord}
             odds={activeOdds}
             calibration={calibration}
             now={now}

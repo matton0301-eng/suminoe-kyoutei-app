@@ -24,6 +24,7 @@ import { formatYen, type Bet } from '@/lib/bets';
 import { ORDERED_KEYS, buildSuggestion, formatTicket, type BetPlan } from '@/lib/betting';
 import { COURSE_FIRST_RATE } from '@/lib/baseline';
 import { findSimulation, type Calibration } from '@/lib/calibration';
+import { buildLenses, type LensRecord } from '@/lib/lenses';
 import { findRaceOdds, formatFetchedAt, type OddsDay } from '@/lib/odds';
 import {
   buildPatterns,
@@ -40,6 +41,7 @@ import { reviewPlans } from '@/lib/review';
 import type { ResultDay } from '@/lib/results';
 import { BOAT_COLORS, type Boat } from '@/lib/types';
 
+import { LensPanel } from './LensPanel';
 import { RaceOutcome } from './RaceOutcome';
 import { StakePicker, stakeYen } from './StakePicker';
 
@@ -55,6 +57,8 @@ interface BetsTabProps {
    * **表示だけに使う。** 買い目の評価には入れない（同じ材料で2回評価しないため）
    */
   tenji: TenjiDay | null;
+  /** 視点ごとの実測。無ければ実績行を出さない */
+  lensRecord: LensRecord | null;
   /** 公式のオッズ。30分おきに更新されるので、表示には取得時刻を必ず添える */
   odds: OddsDay | null;
   /** 確率モデルの較正結果。期待値の数字に必ず添える */
@@ -78,6 +82,7 @@ export function BetsTab({
   resultCount,
   results,
   tenji,
+  lensRecord,
   odds,
   calibration,
   focusRaceNo,
@@ -449,6 +454,15 @@ export function BetsTab({
             です。下の買い目は「それでも買うなら」という前提の型です。
           </p>
         </section>
+      ) : null}
+
+      {/*
+        5つの視点。**買い目より先に置く。**
+        「どの材料がどの艇を推しているか」を見てから型を見るほうが、
+        なぜその買い目なのかが分かる。
+      */}
+      {race ? (
+        <LensPanel verdict={buildLenses(race, tenjiRace, raceOdds)} record={lensRecord} />
       ) : null}
 
       {/* このレースの買い方（3パターン） */}
