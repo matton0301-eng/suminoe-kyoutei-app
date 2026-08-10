@@ -6,12 +6,13 @@
 #
 # 時刻はすべて UTC で書く。JST = UTC + 9時間。
 #
-# 実行に必要なもの（リポジトリの Settings > Secrets and variables > Actions）:
-#   VERCEL_TOKEN        Vercel の Account Settings > Tokens で発行
-#   VERCEL_ORG_ID       ローカルの apps/suminoe-log/.vercel/project.json の orgId
-#   VERCEL_PROJECT_ID   同 projectId
+# **トークンは要らない。**
+# Vercel プロジェクトを GitHub リポジトリに連携してあるので（`vercel git connect`）、
+# main に push すれば Vercel が自動でデプロイする。
+# ここからデプロイすると長期間有効な資格情報を1つ抱えることになるので、そうしない。
 #
-# 秘密情報はここに書かない。ワークフローは public でも Secrets は公開されない。
+# 前提: Vercel 側の Root Directory が `apps/suminoe-log` になっていること。
+# `.` のままだとリポジトリ直下に package.json が無くビルドが落ちる。
 
 name: 住之江データ収集
 
@@ -42,6 +43,10 @@ on:
 concurrency:
   group: suminoe-collect
   cancel-in-progress: false
+
+permissions:
+  # データをリポジトリに書き戻すために要る。これ以外は与えない
+  contents: write
 
 jobs:
   collect:
@@ -105,33 +110,25 @@ jobs:
           JOB: ${{ steps.pick.outputs.job }}
         run: bash .github/scripts/collect.sh
 
-      # 中身が変わったときだけデプロイする。
-      # 変わっていないのにデプロイすると、無料枠の実行時間を無駄に食う。
+      # 中身が変わったときだけ push する。
+      # 変わっていないのに push すると、そのたびに Vercel のビルドが走って無駄になる。
       - name: 変化があるか見る
         id: diff
         run: |
           if git diff --quiet -- apps/suminoe-log/public; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "変化なし。デプロイしません。"
+            echo "変化なし。push しません。"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             git diff --stat -- apps/suminoe-log/public
           fi
 
-      - name: Vercel にデプロイする
-        if: steps.diff.outputs.changed == 'true'
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: |
-          npx --yes vercel@latest deploy --prod --yes \
-            --token "${{ secrets.VERCEL_TOKEN }}" \
-            --cwd apps/suminoe-log
-
-      # 集めたデータをリポジトリにも残す。
-      # **オッズは過去に遡って取れない。** デプロイだけだと履歴が残らないので、
-      # 後から検証できるようにコミットする。
-      - name: 集めたデータをコミットする
+      # 集めたデータをコミットして push する。**これがデプロイの引き金になる**
+      # （Vercel が main への push を見て自動でビルドする）。
+      #
+      # **オッズは過去に遡って取れない。** リポジトリに残しておかないと、
+      # 「その買い方で買っていたらどうだったか」を後から測れなくなる。
+      - name: 集めたデータをコミットして push する
         if: steps.diff.outputs.changed == 'true'
         run: |
           git config user.name  "github-actions[bot]"
@@ -139,7 +136,9 @@ jobs:
           git add apps/suminoe-log/public tools/suminoe-read/output || true
           if git diff --cached --quiet; then
             echo "コミットするものがありません。"
-          else
-            git commit -m "data: $(TZ=Asia/Tokyo date +%F) の${{ steps.pick.outputs.job }}を取り込む"
-            git push
+            exit 0
           fi
+          git commit -m "data: $(TZ=Asia/Tokyo date +%F) の${{ steps.pick.outputs.job }}を取り込む"
+          # 別の回が先に push していることがあるので、取り込んでから送る
+          git pull --rebase --autostash origin main
+          git push
