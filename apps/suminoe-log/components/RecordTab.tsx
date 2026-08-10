@@ -24,6 +24,7 @@ import {
   type RaceLog,
 } from '@/lib/types';
 
+import { BetBuilder } from './BetBuilder';
 import { BoatPicker } from './BoatPicker';
 
 interface RecordTabProps {
@@ -178,19 +179,26 @@ export function RecordTab({
         )}
       </section>
 
-      {/* ② 買った舟券 */}
+      {/*
+        ② 買った舟券。**ここが記録タブの主役。**
+        8/9 の観戦では着順の手入力がほとんど使われなかった（夜に自動で入るため）。
+        代わりに「券種ごとに何をいくら買ったか」を残せることが本当に要る機能だった。
+      */}
       <Section
         title="買った舟券"
-        hint="買い目タブの「この◯点を買った」で入ります"
+        hint="券種を選び、艇を押して組みます。買い目タブの「この◯点を買った」でも入ります"
       >
+        {!form.ken ? <BetBuilder onAdd={(bet) => dispatch({ type: 'addBets', bets: [bet] })} /> : null}
+
         {form.bets.length === 0 ? (
           <p className="pb-1 text-xs text-text-mute">
             {form.ken
               ? 'このレースは見（ケン）で記録します。'
-              : 'まだ記録がありません。買わずに見るなら下の「見（ケン）」を押してください。'}
+              : 'まだ登録がありません。買わずに見るなら下の「見（ケン）」を押してください。'}
           </p>
         ) : (
           <ul className="space-y-1 pb-1">
+            <li className="pt-1 text-[11px] text-text-mute">登録済み</li>
             {form.bets.map((bet, index) => (
               <li
                 key={`${betKey(bet)}-${index}`}
