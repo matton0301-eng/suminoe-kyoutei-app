@@ -12,12 +12,14 @@ import { useState } from 'react';
 
 import {
   BET_TYPE_SPECS,
+  emptySlots,
   formatSelection,
   isComplete,
   normalizeCombo,
-  placeOf,
+  setSlot,
+  slotLabel,
   specOf,
-  toggleBoat,
+  type Slots,
 } from '@/lib/betBuilder';
 import type { Bet } from '@/lib/bets';
 import { betTypeGuide } from '@/lib/glossary';
@@ -32,12 +34,12 @@ interface BetBuilderProps {
 
 export function BetBuilder({ onAdd }: BetBuilderProps) {
   const [betType, setBetType] = useState<PayoutKey>('trio');
-  const [selected, setSelected] = useState<Boat[]>([]);
+  const [slots, setSlots] = useState<Slots>(() => emptySlots(specOf('trio')));
   const [stakeAmount, setStakeAmount] = useState(1);
   const [stakeUnit, setStakeUnit] = useState(100);
 
   const spec = specOf(betType);
-  const ready = isComplete(selected, spec);
+  const ready = isComplete(slots, spec);
   const unitYen = stakeYen(stakeAmount, stakeUnit);
   const guide = betTypeGuide(betType);
 
@@ -45,10 +47,10 @@ export function BetBuilder({ onAdd }: BetBuilderProps) {
     if (!ready) return;
     onAdd({
       betType,
-      combo: normalizeCombo(selected, spec),
+      combo: normalizeCombo(slots, spec),
       amountYen: unitYen,
     });
-    setSelected([]);
+    setSlots(emptySlots(spec));
   };
 
   return (
@@ -61,7 +63,7 @@ export function BetBuilder({ onAdd }: BetBuilderProps) {
             type="button"
             onClick={() => {
               setBetType(entry.key);
-              setSelected([]);
+              setSlots(emptySlots(entry));
             }}
             aria-pressed={betType === entry.key}
             className={[
@@ -91,46 +93,52 @@ export function BetBuilder({ onAdd }: BetBuilderProps) {
         ) : null}
       </div>
 
-      {/* 艇を選ぶ */}
-      <div className="grid grid-cols-6 gap-1">
-        {BOATS.map((boat) => {
-          const place = placeOf(selected, boat, spec);
-          const picked = selected.includes(boat);
-          const color = BOAT_COLORS[boat];
-          return (
-            <button
-              key={boat}
-              type="button"
-              onClick={() => setSelected((current) => toggleBoat(current, boat, spec))}
-              aria-pressed={picked}
-              aria-label={`${boat}号艇${place ? ` ${place}着` : ''}`}
-              className={[
-                'boat-edge relative flex h-12 items-center justify-center text-lg font-black',
-                picked ? 'accent-glow' : '',
-              ].join(' ')}
-              style={{ backgroundColor: color.bg, color: color.fg }}
-            >
-              {boat}
-              {place !== null ? (
-                <span className="on-accent absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center bg-accent text-[11px] font-black">
-                  {place}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
+      {/*
+        着順ごとの欄。**公式マークシートと同じ並び。**
+        現地で紙のカードと見比べながら入力できるようにしてある。
+      */}
+      <div className="space-y-1">
+        {slots.map((picked, index) => (
+          <div key={index}>
+            <p className="text-[11px] text-text-mute">{slotLabel(index, spec)}</p>
+            <div className="mt-0.5 grid grid-cols-6 gap-1">
+              {BOATS.map((boat) => {
+                const color = BOAT_COLORS[boat];
+                const chosen = picked === boat;
+                const usedElsewhere = !chosen && slots.includes(boat);
+                return (
+                  <button
+                    key={boat}
+                    type="button"
+                    onClick={() => setSlots((current) => setSlot(current, index, boat))}
+                    aria-pressed={chosen}
+                    aria-label={`${slotLabel(index, spec)}に${boat}号艇`}
+                    className={[
+                      'boat-edge flex h-11 items-center justify-center text-base font-black',
+                      chosen ? 'accent-glow' : '',
+                      usedElsewhere ? 'opacity-30' : '',
+                    ].join(' ')}
+                    style={{ backgroundColor: color.bg, color: color.fg }}
+                  >
+                    {boat}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* 組んでいる買い目 */}
       <div className="flex items-baseline gap-2 border border-line bg-bg-raised px-2 py-1.5">
         <span className="text-[11px] text-text-mute">{spec.label}</span>
         <span className="tnum text-lg font-black text-text-main">
-          {formatSelection(selected, spec)}
+          {formatSelection(slots, spec)}
         </span>
-        {selected.length > 0 ? (
+        {slots.some((entry) => entry !== null) ? (
           <button
             type="button"
-            onClick={() => setSelected([])}
+            onClick={() => setSlots(emptySlots(spec))}
             className="ml-auto min-h-9 px-2 text-xs text-text-mute underline"
           >
             選び直す
@@ -160,8 +168,8 @@ export function BetBuilder({ onAdd }: BetBuilderProps) {
         ].join(' ')}
       >
         {ready
-          ? `${spec.label} ${formatSelection(selected, spec)} を ${unitYen.toLocaleString('ja-JP')}円 で追加`
-          : `あと${spec.size - selected.length}艇`}
+          ? `${spec.label} ${formatSelection(slots, spec)} を ${unitYen.toLocaleString('ja-JP')}円 で追加`
+          : `あと${slots.filter((entry) => entry === null).length}つ選んでください`}
       </button>
     </div>
   );

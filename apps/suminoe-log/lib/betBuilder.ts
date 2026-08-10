@@ -1,13 +1,18 @@
 /**
  * 買った舟券を組み立てる操作。
  *
- * 記録タブの主役。**着順が意味を持つ賭式とそうでない賭式で、押したときの挙動が違う。**
+ * **公式のマークシート（投票カード）と同じ形にしてある。**
+ * 現地で手にしているのがあの紙なので、画面が別の組み方をしていると
+ * 見比べながら入力できない。カードの順に:
  *
- *   3連単・2連単・単勝  → 押した順がそのまま着順。同じ艇は2回選べない
- *   3連複・2連複・拡連複・複勝 → 順不同。押すたびに入り／切りが変わる
+ *   式別（券種） → 1着・2着・3着の欄 → 金額 → 単位（百/千/万）
+ *
+ * 着順の欄は賭式ごとに数が変わる（3連単は3つ、2連単は2つ、単勝は1つ）。
+ * **同じ艇を2つの欄に入れられない。** 別の欄で選び直したら、元の欄からは外れる
+ * （カードでも同じ艇を2か所には塗れない）。
  *
  * ここは金額と同じく「記録として残る」側なので、
- * **組みかけの中途半端な買い目を確定させない**（必要な艇数が揃うまで追加できない）。
+ * **欄が埋まりきるまで確定させない**（中途半端な買い目を記録に残さない）。
  */
 
 import type { PayoutKey } from './results';
@@ -39,49 +44,119 @@ export function specOf(key: PayoutKey): BetTypeSpec {
   return BET_TYPE_SPECS.find((entry) => entry.key === key) ?? BET_TYPE_SPECS[0];
 }
 
-/**
- * 艇を押したときの新しい選択。
- *
- * 着順ありは「押した順に積む。既に入っていれば外す」。
- * 順不同は「入っていなければ足す、入っていれば外す」。どちらも上限で止める。
- */
-export function toggleBoat(selected: Boat[], boat: Boat, spec: BetTypeSpec): Boat[] {
-  const index = selected.indexOf(boat);
-  if (index >= 0) {
-    // もう一度押したら外す。着順ありでは後ろの艇も繰り上がる
-    return selected.filter((entry) => entry !== boat);
-  }
-  if (selected.length >= spec.size) return selected;
-  return [...selected, boat];
+/** 着順の欄。マークシートの「1着」「2着」「3着」に対応する。null は未記入 */
+export type Slots = (Boat | null)[];
+
+/** その賭式の空の欄を作る */
+export function emptySlots(spec: BetTypeSpec): Slots {
+  return Array.from({ length: spec.size }, () => null);
 }
 
-/** 追加できる状態か。艇数がちょうど揃っていること */
-export function isComplete(selected: Boat[], spec: BetTypeSpec): boolean {
-  return selected.length === spec.size && new Set(selected).size === spec.size;
+/** 欄の見出し。着順が意味を持たない賭式でも、カードと同じ「◯着」で並べる */
+export function slotLabel(index: number, spec: BetTypeSpec): string {
+  if (spec.size === 1) return spec.ordered ? '1着' : '選ぶ艇';
+  return `${index + 1}着`;
+}
+
+/**
+ * 欄に艇を入れる。
+ *
+ * **同じ艇は2つの欄に入らない。** 別の欄に入っていたらそこから外す
+ * （マークシートでも同じ艇を2か所には塗れない）。
+ * 同じ欄の同じ艇をもう一度押したら取り消し。
+ */
+export function setSlot(slots: Slots, index: number, boat: Boat): Slots {
+  const next = slots.map((entry) => (entry === boat ? null : entry));
+  next[index] = slots[index] === boat ? null : boat;
+  return next;
+}
+
+/** 欄をすべて空にする */
+export function clearSlots(spec: BetTypeSpec): Slots {
+  return emptySlots(spec);
+}
+
+/** 追加できる状態か。**全部の欄が埋まり、艇が重複していないこと** */
+export function isComplete(slots: Slots, spec: BetTypeSpec): boolean {
+  const filled = slots.filter((entry): entry is Boat => entry !== null);
+  return filled.length === spec.size && new Set(filled).size === spec.size;
 }
 
 /**
  * 保存する形に整える。
  * 順不同の賭式は昇順に正規化しておく（同じ買い目を別物として二重に持たないため）。
  */
-export function normalizeCombo(selected: Boat[], spec: BetTypeSpec): Boat[] {
-  return spec.ordered ? [...selected] : [...selected].sort((a, b) => a - b);
+export function normalizeCombo(slots: Slots, spec: BetTypeSpec): Boat[] {
+  const filled = slots.filter((entry): entry is Boat => entry !== null);
+  return spec.ordered ? filled : [...filled].sort((a, b) => a - b);
 }
 
-/** 選択中の買い目を表示用の文字列に。まだ揃っていない分は「?」で埋める */
-export function formatSelection(selected: Boat[], spec: BetTypeSpec): string {
+/** 記入中の買い目を表示用の文字列に。空欄は「?」で出す */
+export function formatSelection(slots: Slots, spec: BetTypeSpec): string {
   const separator = spec.ordered ? '-' : '=';
-  const shown = spec.ordered ? selected : [...selected].sort((a, b) => a - b);
-  const slots = [...shown.map(String), ...Array(Math.max(0, spec.size - shown.length)).fill('?')];
-  return slots.join(separator);
+  if (!isComplete(slots, spec)) {
+    return slots.map((entry) => (entry === null ? '?' : String(entry))).join(separator);
+  }
+  return normalizeCombo(slots, spec).join(separator);
 }
+
+/* ────────────────────────────────────────────
+   ボックス投票
+   ──────────────────────────────────────────── */
 
 /**
- * 着順ありのとき、その艇が何着目に選ばれているか（1始まり）。
- * 選ばれていなければ null。順不同では常に null（着順の意味が無いため）。
+ * ボックスは「選んだ艇の全組み合わせを買う」買い方。
+ *
+ * 公式のマークシート（フォーメーション／ボックス用カード）に点数表が刷ってある:
+ *
+ *   マーク数   3艇  4艇  5艇  6艇
+ *   3連単       6   24   60  120
+ *   3連複       1    4   10   20
+ *   2連単       6   12   20   30
+ *   2連複       3    6   10   15
+ *
+ * **この表をテストの答え合わせに使う。** 組み合わせの計算を間違えると、
+ * 買った点数と金額が実際とずれる。金額は記録として残る側なので、ここは外せない。
  */
-export function placeOf(selected: Boat[], boat: Boat, spec: BetTypeSpec): number | null {
-  if (!spec.ordered) return null;
-  const index = selected.indexOf(boat);
-  return index >= 0 ? index + 1 : null;
+export function expandBox(boats: Boat[], spec: BetTypeSpec): Boat[][] {
+  const unique = [...new Set(boats)].sort((a, b) => a - b);
+  if (unique.length < spec.size) return [];
+
+  const combos: Boat[][] = [];
+
+  const chooseUnordered = (start: number, picked: Boat[]) => {
+    if (picked.length === spec.size) {
+      combos.push([...picked]);
+      return;
+    }
+    for (let i = start; i < unique.length; i += 1) {
+      chooseUnordered(i + 1, [...picked, unique[i]]);
+    }
+  };
+
+  const chooseOrdered = (picked: Boat[]) => {
+    if (picked.length === spec.size) {
+      combos.push([...picked]);
+      return;
+    }
+    for (const boat of unique) {
+      if (picked.includes(boat)) continue;
+      chooseOrdered([...picked, boat]);
+    }
+  };
+
+  if (spec.ordered) chooseOrdered([]);
+  else chooseUnordered(0, []);
+
+  return combos;
+}
+
+/** ボックスの点数。艇が足りなければ0 */
+export function boxPoints(boatCount: number, spec: BetTypeSpec): number {
+  if (boatCount < spec.size) return 0;
+  let value = 1;
+  for (let i = 0; i < spec.size; i += 1) value *= boatCount - i;
+  if (spec.ordered) return value;
+  for (let i = 2; i <= spec.size; i += 1) value /= i;
+  return value;
 }

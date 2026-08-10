@@ -1,8 +1,9 @@
 /**
  * 買い目の組み立てのテスト。
  *
- * ここは金額と並んで「記録として残る」側。**中途半端な買い目を確定させない**ことと、
- * 着順あり／順不同で挙動が変わることを固定する。
+ * **公式のマークシートと同じ形になっているか**が主眼。
+ * ボックスの点数は、フォーメーション／ボックス用カードに刷ってある点数表を
+ * そのまま答え合わせに使う（ここを間違えると買った点数と金額がずれる）。
  */
 
 import assert from 'node:assert/strict';
@@ -11,17 +12,22 @@ import { describe, it } from 'vitest';
 
 import {
   BET_TYPE_SPECS,
+  boxPoints,
+  emptySlots,
+  expandBox,
   formatSelection,
   isComplete,
   normalizeCombo,
-  placeOf,
+  setSlot,
+  slotLabel,
   specOf,
-  toggleBoat,
 } from './betBuilder';
 import type { Boat } from './types';
 
 const trifecta = specOf('trifecta');
 const trio = specOf('trio');
+const exacta = specOf('exacta');
+const quinella = specOf('quinella');
 const win = specOf('win');
 
 describe('賭式の定義', () => {
@@ -45,56 +51,50 @@ describe('賭式の定義', () => {
   });
 });
 
-describe('toggleBoat（着順あり）', () => {
-  it('押した順に積む', () => {
-    let selected: Boat[] = [];
-    selected = toggleBoat(selected, 1, trifecta);
-    selected = toggleBoat(selected, 4, trifecta);
-    selected = toggleBoat(selected, 6, trifecta);
-    assert.deepEqual(selected, [1, 4, 6]);
+describe('着順の欄（マークシートと同じ形）', () => {
+  it('欄に艇を入れる', () => {
+    let slots = emptySlots(trifecta);
+    slots = setSlot(slots, 0, 1);
+    slots = setSlot(slots, 1, 4);
+    slots = setSlot(slots, 2, 6);
+    assert.deepEqual(slots, [1, 4, 6]);
   });
 
-  it('もう一度押すと外れ、後ろが繰り上がる', () => {
-    const selected = toggleBoat([1, 4, 6], 4, trifecta);
-    assert.deepEqual(selected, [1, 6], '4を外すと6が2着目になる');
+  it('同じ艇を2つの欄に入れられない（カードでも2か所は塗れない）', () => {
+    let slots = emptySlots(trifecta);
+    slots = setSlot(slots, 0, 1);
+    slots = setSlot(slots, 1, 1);
+    assert.deepEqual(slots, [null, 1, null], '前の欄から外れる');
   });
 
-  it('必要数を超えて足さない', () => {
-    const selected = toggleBoat([1, 4, 6], 2, trifecta);
-    assert.deepEqual(selected, [1, 4, 6], '3艇そろっていれば増えない');
+  it('同じ欄の同じ艇をもう一度押すと取り消し', () => {
+    assert.deepEqual(setSlot([1, 4, 6], 1, 4), [1, null, 6]);
   });
 
-  it('同じ艇を2回入れない', () => {
-    const selected = toggleBoat([1], 1, trifecta);
-    assert.deepEqual(selected, [], '押し直しは解除');
-  });
-});
-
-describe('toggleBoat（順不同）', () => {
-  it('押した順は保たれるが、意味を持たない', () => {
-    let selected: Boat[] = [];
-    selected = toggleBoat(selected, 6, trio);
-    selected = toggleBoat(selected, 1, trio);
-    selected = toggleBoat(selected, 4, trio);
-    assert.deepEqual(normalizeCombo(selected, trio), [1, 4, 6]);
+  it('空の欄は賭式ぶんだけ作られる', () => {
+    assert.equal(emptySlots(trifecta).length, 3);
+    assert.equal(emptySlots(exacta).length, 2);
+    assert.equal(emptySlots(win).length, 1);
   });
 
-  it('上限で止まる', () => {
-    assert.deepEqual(toggleBoat([1, 2, 3], 4, trio), [1, 2, 3]);
+  it('欄の見出しはカードと同じ「◯着」', () => {
+    assert.equal(slotLabel(0, trifecta), '1着');
+    assert.equal(slotLabel(2, trifecta), '3着');
+    assert.equal(slotLabel(0, trio), '1着', '順不同でもカードは着順欄を使う');
   });
 });
 
 describe('isComplete', () => {
-  it('艇数がちょうど揃ったときだけ追加できる', () => {
-    assert.equal(isComplete([1, 4], trifecta), false, '2艇では足りない');
+  it('全部の欄が埋まって初めて追加できる', () => {
+    assert.equal(isComplete([1, 4, null], trifecta), false);
     assert.equal(isComplete([1, 4, 6], trifecta), true);
     assert.equal(isComplete([1], win), true);
-    assert.equal(isComplete([], win), false);
+    assert.equal(isComplete([null], win), false);
   });
 });
 
 describe('normalizeCombo', () => {
-  it('着順ありはそのまま', () => {
+  it('着順ありは欄の順のまま', () => {
     assert.deepEqual(normalizeCombo([6, 1, 4], trifecta), [6, 1, 4]);
   });
 
@@ -109,20 +109,71 @@ describe('formatSelection', () => {
     assert.equal(formatSelection([6, 1, 4], trio), '1=4=6');
   });
 
-  it('揃っていない分は ? で埋める（何艇足りないか分かる）', () => {
-    assert.equal(formatSelection([1], trifecta), '1-?-?');
-    assert.equal(formatSelection([], trio), '?=?=?');
+  it('空欄は ? で出す（どこが足りないか分かる）', () => {
+    assert.equal(formatSelection([1, null, null], trifecta), '1-?-?');
+    assert.equal(formatSelection([null, null, null], trio), '?=?=?');
   });
 });
 
-describe('placeOf', () => {
-  it('着順ありなら何着目かを返す', () => {
-    assert.equal(placeOf([1, 4, 6], 1, trifecta), 1);
-    assert.equal(placeOf([1, 4, 6], 6, trifecta), 3);
-    assert.equal(placeOf([1, 4, 6], 2, trifecta), null);
+/**
+ * 公式のフォーメーション／ボックス用カードに刷ってある点数表:
+ *
+ *   マーク数   3艇  4艇  5艇  6艇
+ *   3連単       6   24   60  120
+ *   3連複       1    4   10   20
+ *   2連単       6   12   20   30
+ *   2連複       3    6   10   15
+ */
+describe('ボックスの点数（公式カードの表と一致すること）', () => {
+  const table: [ReturnType<typeof specOf>, number[]][] = [
+    [trifecta, [6, 24, 60, 120]],
+    [trio, [1, 4, 10, 20]],
+    [exacta, [6, 12, 20, 30]],
+    [quinella, [3, 6, 10, 15]],
+  ];
+
+  it('点数が公式の表と一致する', () => {
+    for (const [spec, expected] of table) {
+      for (const [index, count] of [3, 4, 5, 6].entries()) {
+        assert.equal(
+          boxPoints(count, spec),
+          expected[index],
+          `${spec.label} ${count}艇は${expected[index]}点のはず`,
+        );
+      }
+    }
   });
 
-  it('順不同では着順を出さない（意味が無いため）', () => {
-    assert.equal(placeOf([1, 4, 6], 1, trio), null);
+  it('展開した買い目の数が点数と一致する', () => {
+    for (const [spec, expected] of table) {
+      for (const [index, count] of [3, 4, 5, 6].entries()) {
+        const boats = [1, 2, 3, 4, 5, 6].slice(0, count) as Boat[];
+        assert.equal(expandBox(boats, spec).length, expected[index], `${spec.label} ${count}艇`);
+      }
+    }
+  });
+
+  it('艇が足りなければ0点。買い目も作らない', () => {
+    assert.equal(boxPoints(2, trifecta), 0);
+    assert.deepEqual(expandBox([1, 2] as Boat[], trifecta), []);
+  });
+
+  it('順不同は同じ組を二重に作らない', () => {
+    const combos = expandBox([1, 2, 3, 4] as Boat[], trio);
+    const keys = combos.map((combo) => combo.join('-'));
+    assert.equal(new Set(keys).size, keys.length);
+    assert.ok(combos.every((combo) => combo[0] < combo[1] && combo[1] < combo[2]));
+  });
+
+  it('着順ありは並びの違うものを別々に作る', () => {
+    const combos = expandBox([1, 2, 3] as Boat[], trifecta);
+    const keys = combos.map((combo) => combo.join('-'));
+    assert.ok(keys.includes('1-2-3'));
+    assert.ok(keys.includes('3-2-1'));
+    assert.equal(new Set(keys).size, 6);
+  });
+
+  it('同じ艇を重ねて渡しても数えない', () => {
+    assert.equal(expandBox([1, 1, 2, 3] as Boat[], trio).length, 1);
   });
 });
