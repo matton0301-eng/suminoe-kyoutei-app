@@ -284,13 +284,18 @@ export function BetsTab({
             const left = now ? minutesUntil(entry.deadline, now, card.date) : null;
             const closingSoon = left !== null && left >= 0 && left <= 10;
             const closed = left !== null && left < 0;
-            // 判定は「買うかどうか」の結論。冷たい青から熱い赤へ、そのまま温度で出す
+            /**
+             * 判定は「買うかどうか」の結論。**期待度と同じ色を使わない。**
+             * 以前は判定も期待度も 青→緑→赤 で出していたので、
+             * 「見送り（青）なのに帯が赤」が矛盾に見えた（実機で指摘を受けた）。
+             * 判定は朱を勝負にだけ置き、あとは墨と灰で出す（新聞の本命＝朱に戻す）。
+             */
             const verdictClass =
               entry.verdict === '勝負'
-                ? 'heat-text-3 font-black'
+                ? 'text-accent font-black'
                 : entry.verdict === '標準'
-                  ? 'heat-text-2 font-bold'
-                  : 'heat-text-1';
+                  ? 'text-text-main font-bold'
+                  : 'text-text-mute';
             return (
               <button
                 key={entry.raceNo}
@@ -339,18 +344,18 @@ export function BetsTab({
         </div>
         <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[10px] text-text-mute">
           <span>
-            <span className="heat-text-3 font-black">勝負</span>
+            <span className="font-black text-accent">勝負</span>
             {card.races.filter((entry) => entry.verdict === '勝負').length}件
           </span>
           <span>
-            <span className="heat-text-2 font-bold">標準</span>
+            <span className="font-bold text-text-main">標準</span>
             {card.races.filter((entry) => entry.verdict === '標準').length}件
           </span>
           <span>
-            <span className="heat-text-1">見送</span>
+            <span className="text-text-mute">見送</span>
             {card.races.filter((entry) => entry.verdict === '見送り').length}件
           </span>
-          <span className="ml-auto">下の帯＝期待度（青→緑→赤→金→虹）</span>
+          <span className="ml-auto">下の帯＝的中率の高さ（青→緑→赤→金→虹）</span>
         </p>
       </section>
 
