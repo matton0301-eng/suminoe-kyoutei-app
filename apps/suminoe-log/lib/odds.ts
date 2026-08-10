@@ -181,3 +181,39 @@ export async function fetchOddsDay(): Promise<OddsDay | null> {
 export async function fetchArchiveOdds(iso: string): Promise<OddsDay | null> {
   return fetchOddsFrom(archiveOddsUrl(iso));
 }
+
+/* ────────────────────────────────────────────
+   オンデマンド取得（見た瞬間の値）
+   ──────────────────────────────────────────── */
+
+/**
+ * そのレースのオッズを、いま公式から取り直す。
+ *
+ * 収集の仕組み（15分おき）で入る `odds.json` は、締切直前に最大15分古い。
+ * **画面で見ているレースだけは、その場で取り直す。**
+ * 8/9 のいちばんの不満が「オッズが反映されてない」だった。
+ *
+ * **取れなければ null を返す。** 呼び出し側は `odds.json` の値を出し続ける。
+ * 新しい値が取れないことを理由に、画面から数字を消してはいけない。
+ */
+export async function fetchLiveRaceOdds(
+  date: string,
+  raceNo: number,
+  options: { all?: boolean; signal?: AbortSignal } = {},
+): Promise<RaceOddsData | null> {
+  try {
+    const query = new URLSearchParams({ date, race: String(raceNo) });
+    if (options.all) query.set('all', '1');
+    const response = await fetch(`/api/odds?${query.toString()}`, { signal: options.signal });
+    if (!response.ok) return null;
+
+    const raw = (await response.json()) as Record<string, unknown>;
+    if (raw.available !== true) return null;
+
+    const race = parseRace({ ...raw, raceNo });
+    // 3連単も3連複も空なら、取れていないのと同じ
+    return race && (race.trifecta.size > 0 || race.trio.size > 0) ? race : null;
+  } catch {
+    return null;
+  }
+}

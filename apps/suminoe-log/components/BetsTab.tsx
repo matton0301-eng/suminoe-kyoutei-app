@@ -9,7 +9,7 @@
  * **推奨ではなく型の提示に留める。** 控除率25%の前提を画面から消さない。
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   fastestTenji,
@@ -26,7 +26,13 @@ import { COURSE_FIRST_RATE } from '@/lib/baseline';
 import { findSimulation, type Calibration } from '@/lib/calibration';
 import { describeRecovery } from '@/lib/glossary';
 import { buildLenses, type LensRecord } from '@/lib/lenses';
-import { findRaceOdds, formatFetchedAt, type OddsDay } from '@/lib/odds';
+import {
+  fetchLiveRaceOdds,
+  findRaceOdds,
+  formatFetchedAt,
+  type OddsDay,
+  type RaceOddsData,
+} from '@/lib/odds';
 import {
   buildPatterns,
   formatPatternTicket,
@@ -143,11 +149,52 @@ export function BetsTab({
     [tenji, race, card],
   );
 
-  /** そのレースのオッズ。日付が違う・発売前なら null */
-  const raceOdds = useMemo(
+  /** 収集の仕組みが入れた値（15分おき）。取り直せなければこれを使い続ける */
+  const storedOdds = useMemo(
     () => (race && card ? findRaceOdds(odds, race.raceNo, card.date) : null),
     [odds, race, card],
   );
+
+  /**
+   * 見ているレースだけ、その場で取り直す。
+   *
+   * 収集は15分おきなので、締切直前に最大15分古い値を見ることになる。
+   * **画面に出しているレースだけは、開いたときと1分おきに取り直す。**
+   * 取れなければ何もしない（`storedOdds` を出し続ける）。数字を消さない。
+   */
+  const [liveOdds, setLiveOdds] = useState<RaceOddsData | null>(null);
+  const raceNo = race?.raceNo ?? null;
+  const cardDate = card?.date ?? null;
+
+  // レースや日付が変わったら、前のレースの値を出したままにしない。
+  // effect ではなくレンダー中に同期する（React が推奨する形）
+  const [lastOddsKey, setLastOddsKey] = useState('');
+  const oddsKey = `${cardDate}-${raceNo}`;
+  if (oddsKey !== lastOddsKey) {
+    setLastOddsKey(oddsKey);
+    setLiveOdds(null);
+  }
+
+  useEffect(() => {
+    if (raceNo === null || cardDate === null || readOnly) return;
+    const controller = new AbortController();
+    let cancelled = false;
+    const load = () => {
+      void fetchLiveRaceOdds(cardDate, raceNo, { signal: controller.signal }).then((fetched) => {
+        if (!cancelled && fetched) setLiveOdds(fetched);
+      });
+    };
+    load();
+    const timer = window.setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, [raceNo, cardDate, readOnly]);
+
+  /** 新しく取れたほうを使う */
+  const raceOdds = liveOdds ?? storedOdds;
 
   /**
    * 買い方の3パターン。確率は較正で決めた温度で作る。
