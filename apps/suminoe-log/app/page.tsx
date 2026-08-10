@@ -673,6 +673,11 @@ export default function Page() {
               deadlineLabel={formatMinutesLeft(selectedMinutesLeft)}
               deadlineUrgent={isUrgent(selectedMinutesLeft)}
               onChangeRace={handleChangeRace}
+              resultRace={
+                activeResults && activeResults.date === activeDate
+                  ? (activeResults.races.find((entry) => entry.raceNo === form.raceNo) ?? null)
+                  : null
+              }
               onSave={handleSave}
               onEditLast={handleEditLast}
               onCancelEdit={handleCancelEdit}
@@ -745,6 +750,7 @@ export default function Page() {
 
       <HitCelebration
         hits={celebration.hits}
+        multiples={celebration.hits.map(() => null)}
         token={celebration.token}
         onDone={() => setCelebration({ hits: [], token: 0 })}
       />

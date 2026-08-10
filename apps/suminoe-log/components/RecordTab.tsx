@@ -11,7 +11,9 @@
 import { useState, type Dispatch } from 'react';
 
 import { formatResult } from '@/lib/aggregate';
-import { betKey, formatBet, formatYen } from '@/lib/bets';
+import { betKey, formatYen, hitsByOrder } from '@/lib/bets';
+import { ticketState } from '@/lib/ticketState';
+import type { ResultRace } from '@/lib/results';
 import type { FormAction } from '@/lib/formReducer';
 import type { CardRace } from '@/lib/raceCard';
 import {
@@ -25,6 +27,7 @@ import {
 } from '@/lib/types';
 
 import { BetBuilder } from './BetBuilder';
+import { TicketCard } from './TicketCard';
 import { BoatPicker } from './BoatPicker';
 
 interface RecordTabProps {
@@ -42,6 +45,8 @@ interface RecordTabProps {
    * dispatch で raceNo だけを変えてはいけない（前のレースの「見」が波及する）。
    */
   onChangeRace: (raceNo: number) => void;
+  /** そのレースの公式結果。払戻が確定していれば金額まで出せる */
+  resultRace: ResultRace | null;
   onSave: () => void;
   onEditLast: () => void;
   onCancelEdit: () => void;
@@ -75,6 +80,7 @@ export function RecordTab({
   deadlineLabel,
   deadlineUrgent,
   onChangeRace,
+  resultRace,
   onSave,
   onEditLast,
   onCancelEdit,
@@ -197,27 +203,20 @@ export function RecordTab({
               : 'まだ登録がありません。買わずに見るなら下の「見（ケン）」を押してください。'}
           </p>
         ) : (
-          <ul className="space-y-1 pb-1">
-            <li className="pt-1 text-[11px] text-text-mute">登録済み</li>
-            {form.bets.map((bet, index) => (
-              <li
-                key={`${betKey(bet)}-${index}`}
-                className="flex items-baseline gap-2 border border-line bg-bg-raised px-2 py-1"
-              >
-                <span className="tnum text-sm font-bold text-text-main">{formatBet(bet)}</span>
-                <span className="tnum ml-auto text-xs text-text-mute">
-                  {formatYen(bet.amountYen)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => dispatch({ type: 'removeBet', index })}
-                  aria-label={`${formatBet(bet)} を消す`}
-                  className="min-h-9 px-2 text-xs text-text-mute underline"
-                >
-                  消す
-                </button>
-              </li>
-            ))}
+          <ul className="space-y-1.5 pb-1">
+            <li className="pt-1 text-[11px] text-text-mute">買った舟券</li>
+            {form.bets.map((bet, index) => {
+              const order = [form.resultFirst, form.resultSecond, form.resultThird];
+              const hit = hitsByOrder([bet], order).length > 0;
+              return (
+                <TicketCard
+                  key={`${betKey(bet)}-${index}`}
+                  bet={bet}
+                  state={ticketState(bet, order, resultRace, hit)}
+                  onRemove={() => dispatch({ type: 'removeBet', index })}
+                />
+              );
+            })}
           </ul>
         )}
 

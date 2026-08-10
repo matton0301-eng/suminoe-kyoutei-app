@@ -320,6 +320,85 @@ input[type='text'] {
   will-change: transform;
 }
 
+/* 段が上がるほど渦を濃く。1段目は光条自体を出さない（component 側で判断） */
+.hit-tier-3 .hit-burst { opacity: 0.42; }
+.hit-tier-4 .hit-burst { opacity: 0.5; }
+
+/**
+ * 高い段では**暗転させる。**
+ * 明るい紙の地に虹を重ねると全体が白っぽくなり、金額も買い目も読めなくなる
+ * （実際にそうなった）。暗い地に光る、という順にすると数字が立つ。
+ */
+.hit-tier-3,
+.hit-tier-4 {
+  background: rgba(12, 10, 8, 0.88);
+}
+
+.hit-tier-3 .hit-word,
+.hit-tier-4 .hit-word {
+  color: #fff;
+}
+
+/* 暗転した上では、本文色の指定を白で上書きする */
+.hit-tier-3 .hit-word .text-text-main,
+.hit-tier-4 .hit-word .text-text-main {
+  color: #fff;
+}
+
+.hit-tier-3 .hit-word .text-text-mute,
+.hit-tier-4 .hit-word .text-text-mute {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/**
+ * 万舟のときだけ、画面を一瞬白く飛ばす。
+ * **1回だけ。** 繰り返すと目に痛く、電池にも響く。
+ */
+.hit-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  animation: hit-flash-once 0.45s ease-out forwards;
+}
+
+@keyframes hit-flash-once {
+  0% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+/**
+ * 紙吹雪。**画像は使わない。**
+ * 小さな矩形を transform で落とすだけなので、GPU 合成で済み、
+ * オフライン用のキャッシュも太らせない。
+ */
+.hit-confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.hit-confetti i {
+  position: absolute;
+  top: -8%;
+  width: 8px;
+  height: 14px;
+  opacity: 0.95;
+  animation-name: hit-confetti-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+  will-change: transform;
+}
+
+@keyframes hit-confetti-fall {
+  from {
+    transform: translateY(0) rotate(0deg);
+  }
+  to {
+    transform: translateY(110vh) rotate(540deg);
+  }
+}
+
 .hit-word {
   position: relative;
   font-weight: 900;
