@@ -105,6 +105,10 @@
 - **`apps/suminoe-log/vercel.json` を消さない。** `framework: null` / `outputDirectory: "out"` が必要。
   Vercel の Next.js ビルダーは `.next` から独自に出力を組み立てるため、`next build` の後に
   `out/` へ足した `sw.js` を拾わず、本番で `/sw.js` が404になる（2026-08-07 に実際に踏んだ）
+- **Vercel の Root Directory は `apps/suminoe-log`。** 2026-08-10 に GitHub 連携へ切り替えた。
+  ここが `.` だとリポジトリ直下でビルドが走り、`app` ディレクトリが無くて必ず落ちる（実際に踏んだ）。
+  **リポジトリ直下に `vercel.json` を置いて回避しない。** ヘッダー設定が二重になり、
+  `/sw.js` の 404 という一番踏みたくない不具合を、二箇所を見ないと直せなくなる
 - ログの外部通信は**同一オリジンの `/racecard.json` だけ**。外部APIは呼ばない。
   取得できなければ貼り付けにフォールバックする。SWがキャッシュするのでオフラインでも読める
 - Python の標準出力は UTF-8 に reconfigure（PowerShellでのUnicodeEncodeError実例あり）
@@ -205,6 +209,14 @@ for (const k of await caches.keys()) await caches.delete(k);
 git 履歴の globals.css コメントに残してある。
 
 ## 自動化（Windows タスクスケジューラに登録済み）
+
+**2026-08-10 から GitHub Actions へ移行中**（`.github/workflows/collect.yml`）。
+狙いは PC の起動に依存しないこと。タスクスケジューラだと、PCが落ちている日の
+オッズが永久に取れない。デプロイは **Vercel の Git 連携**が担う（main への push が引き金）。
+**デプロイ用トークンは持たない。** 長期間有効な資格情報を1つ抱えずに済むため。
+
+以下は移行前からある Windows タスク。両方が同時に走っても冪等なので壊れないが、
+GitHub Actions 側が安定したら止める。
 
 | タスク名 | 起動 | 内容 |
 |---|---|---|
