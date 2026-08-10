@@ -55,6 +55,13 @@ for (const file of files) {
   if (EXCLUDE.has(urlPath.slice(1))) continue;
   // 過去日のアーカイブは precache しない（蓄積で肥大するため。過去日閲覧はオンライン前提）
   if (urlPath.startsWith('/archive/')) continue;
+  /**
+   * OCR の実行ファイルと言語データ（5MB超）も precache しない。
+   * **写真取り込みを使うときにしか要らない。** 全員に初回5MBを配ると、
+   * 現地の細い回線で最初の1画面が出るまで待たされる。
+   * 一度使えば fetch ハンドラ側でキャッシュに入り、以降はオフラインでも動く。
+   */
+  if (urlPath.startsWith('/ocr/')) continue;
   urls.add(urlPath);
   // trailingSlash: true なので index.html はディレクトリ URL でも要求される
   if (urlPath.endsWith('/index.html')) {

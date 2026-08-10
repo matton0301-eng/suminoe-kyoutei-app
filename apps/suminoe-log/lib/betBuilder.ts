@@ -160,3 +160,49 @@ export function boxPoints(boatCount: number, spec: BetTypeSpec): number {
   for (let i = 2; i <= spec.size; i += 1) value /= i;
   return value;
 }
+
+/* ────────────────────────────────────────────
+   フォーメーション投票
+   ──────────────────────────────────────────── */
+
+/**
+ * フォーメーションを展開する。
+ *
+ * 各着の候補から1つずつ取り、**同じ艇を2か所に使わない**。
+ * 順不同の賭式では、並びの違うものを1点にまとめる
+ * （公式カードの「重複する組合せは1点として計算します」）。
+ */
+export function expandFormation(rows: Map<number, Boat[]>, spec: BetTypeSpec): Boat[][] {
+  const levels: Boat[][] = [];
+  for (let i = 1; i <= spec.size; i += 1) {
+    const boats = rows.get(i);
+    if (!boats || boats.length === 0) return [];
+    levels.push(boats);
+  }
+
+  const found: Boat[][] = [];
+  const walk = (depth: number, picked: Boat[]) => {
+    if (depth === levels.length) {
+      found.push([...picked]);
+      return;
+    }
+    for (const boat of levels[depth]) {
+      if (picked.includes(boat)) continue;
+      walk(depth + 1, [...picked, boat]);
+    }
+  };
+  walk(0, []);
+
+  if (spec.ordered) return found;
+
+  const seen = new Set<string>();
+  const unique: Boat[][] = [];
+  for (const combo of found) {
+    const sorted = [...combo].sort((a, b) => a - b);
+    const key = sorted.join('-');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(sorted);
+  }
+  return unique;
+}

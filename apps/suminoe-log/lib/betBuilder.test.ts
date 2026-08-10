@@ -15,6 +15,7 @@ import {
   boxPoints,
   emptySlots,
   expandBox,
+  expandFormation,
   formatSelection,
   isComplete,
   normalizeCombo,
@@ -175,5 +176,69 @@ describe('ボックスの点数（公式カードの表と一致すること）'
 
   it('同じ艇を重ねて渡しても数えない', () => {
     assert.equal(expandBox([1, 1, 2, 3] as Boat[], trio).length, 1);
+  });
+});
+
+/**
+ * フォーメーション投票の展開。
+ *
+ * 公式カードの注記「各着、何個でもマークできます。重複する組合せは1点として計算します」
+ * を、実物のフォーメーション券（びわこ 3連単 1着-45 / 2着-45 / 3着-126 → 組合せ数6）で
+ * 答え合わせしてある。
+ */
+describe('フォーメーションの展開', () => {
+  it('実物の券と同じ点数になる（1着45 / 2着45 / 3着126 → 6点）', () => {
+    const rows = new Map<number, Boat[]>([
+      [1, [4, 5]],
+      [2, [4, 5]],
+      [3, [1, 2, 6]],
+    ]);
+    const combos = expandFormation(rows, trifecta);
+    assert.equal(combos.length, 6);
+  });
+
+  it('同じ艇を2か所に使わない', () => {
+    const rows = new Map<number, Boat[]>([
+      [1, [1, 2]],
+      [2, [1, 2]],
+      [3, [1, 2]],
+    ]);
+    assert.deepEqual(expandFormation(rows, trifecta), [], '3艇必要だが2艇しかない');
+  });
+
+  it('着順ありは並びの違うものを別々に数える', () => {
+    const rows = new Map<number, Boat[]>([
+      [1, [1, 2]],
+      [2, [1, 2]],
+      [3, [3]],
+    ]);
+    const combos = expandFormation(rows, trifecta).map((c) => c.join('-'));
+    assert.deepEqual(combos.sort(), ['1-2-3', '2-1-3']);
+  });
+
+  it('順不同は1点にまとめる（公式カードの注記どおり）', () => {
+    const rows = new Map<number, Boat[]>([
+      [1, [1, 2]],
+      [2, [1, 2]],
+      [3, [3, 4]],
+    ]);
+    const combos = expandFormation(rows, trio).map((c) => c.join('='));
+    assert.deepEqual(combos.sort(), ['1=2=3', '1=2=4']);
+  });
+
+  it('着の欄が欠けていれば作らない', () => {
+    const rows = new Map<number, Boat[]>([
+      [1, [1]],
+      [2, [2]],
+    ]);
+    assert.deepEqual(expandFormation(rows, trifecta), []);
+  });
+
+  it('2連単では1着・2着だけを使う', () => {
+    const rows = new Map<number, Boat[]>([
+      [1, [1, 2]],
+      [2, [3, 4]],
+    ]);
+    assert.equal(expandFormation(rows, exacta).length, 4);
   });
 });
