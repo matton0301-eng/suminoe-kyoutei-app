@@ -18,6 +18,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { HitCelebration } from '@/components/HitCelebration';
 import { DayPicker } from '@/components/DayPicker';
 import { ExportTab } from '@/components/ExportTab';
+import { FirstRunGuide, hasSeenGuide, markGuideSeen } from '@/components/FirstRunGuide';
 import { LogList } from '@/components/LogList';
 import { CalendarTab } from '@/components/CalendarTab';
 import { OddsTab } from '@/components/OddsTab';
@@ -91,6 +92,8 @@ export default function Page() {
   const [calendar, setCalendar] = useState<Schedule | null>(null);
   /** 視点ごとの実測（743レースで測定）。買い目タブの5視点に添える */
   const [lensRecord, setLensRecord] = useState<LensRecord | null>(null);
+  /** はじめての人への案内。閉じたら二度と出さない（開催タブから開き直せる） */
+  const [guideOpen, setGuideOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   /** 的中の演出。保存した瞬間に当たっていれば流す */
   const [celebration, setCelebration] = useState<{ hits: Bet[]; token: number }>({
@@ -154,6 +157,7 @@ export default function Page() {
       dispatch({ type: 'reset', raceNo: nextRaceNo(maxRaceNo) });
     }
     setHydrated(true);
+    if (!hasSeenGuide()) setGuideOpen(true);
 
     /**
      * アプリに同梱された出走表を読む（貼り付け不要にするため）。
@@ -583,6 +587,15 @@ export default function Page() {
   return (
     <>
       {/* 新聞の題字。太罫で紙面の頭を切る */}
+      {guideOpen ? (
+        <FirstRunGuide
+          onClose={() => {
+            markGuideSeen();
+            setGuideOpen(false);
+          }}
+        />
+      ) : null}
+
       <header className="sticky top-0 z-10 border-b-[3px] border-text-main bg-bg-deep">
         <div className="relative mx-auto flex max-w-lg items-center justify-between gap-2 px-3 py-1.5">
           <h1 className="text-lg font-black tracking-[0.18em] text-text-main">スミノエ・ログ</h1>
@@ -687,7 +700,13 @@ export default function Page() {
           />
         ) : null}
 
-        {tab === 'calendar' ? <CalendarTab schedule={calendar} today={todayIso()} /> : null}
+        {tab === 'calendar' ? (
+          <CalendarTab
+            schedule={calendar}
+            today={todayIso()}
+            onOpenGuide={() => setGuideOpen(true)}
+          />
+        ) : null}
 
         {tab === 'odds' ? (
           <OddsTab

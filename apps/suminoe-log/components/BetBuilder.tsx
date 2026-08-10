@@ -20,6 +20,7 @@ import {
   toggleBoat,
 } from '@/lib/betBuilder';
 import type { Bet } from '@/lib/bets';
+import { betTypeGuide } from '@/lib/glossary';
 import type { PayoutKey } from '@/lib/results';
 import { BOAT_COLORS, BOATS, type Boat } from '@/lib/types';
 
@@ -38,6 +39,7 @@ export function BetBuilder({ onAdd }: BetBuilderProps) {
   const spec = specOf(betType);
   const ready = isComplete(selected, spec);
   const unitYen = stakeYen(stakeAmount, stakeUnit);
+  const guide = betTypeGuide(betType);
 
   const add = () => {
     if (!ready) return;
@@ -74,10 +76,20 @@ export function BetBuilder({ onAdd }: BetBuilderProps) {
         ))}
       </div>
 
-      <p className="text-[11px] text-text-mute">
-        {spec.hint}。<strong className="text-text-main">{spec.size}艇</strong>選んでください
-        {spec.ordered ? '（押した順が着順になります）' : ''}
-      </p>
+      {/* 券種を選んだ直後に「これは何を当てるものか」を出す。素人はここで迷う */}
+      <div className="border-l-2 border-line pl-2">
+        <p className="text-[11px] leading-snug text-text-main">
+          {guide?.short ?? spec.hint}
+        </p>
+        <p className="mt-0.5 text-[11px] text-text-mute">
+          {guide ? `全${guide.combinations}通り。` : ''}
+          <strong className="text-text-main">{spec.size}艇</strong>選んでください
+          {spec.ordered ? '（押した順が着順になります）' : ''}
+        </p>
+        {guide?.more ? (
+          <p className="mt-0.5 text-[11px] text-text-mute">{guide.more}</p>
+        ) : null}
+      </div>
 
       {/* 艇を選ぶ */}
       <div className="grid grid-cols-6 gap-1">

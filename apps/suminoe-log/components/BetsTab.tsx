@@ -24,6 +24,7 @@ import { formatYen, type Bet } from '@/lib/bets';
 import { ORDERED_KEYS, buildSuggestion, formatTicket, type BetPlan } from '@/lib/betting';
 import { COURSE_FIRST_RATE } from '@/lib/baseline';
 import { findSimulation, type Calibration } from '@/lib/calibration';
+import { describeRecovery } from '@/lib/glossary';
 import { buildLenses, type LensRecord } from '@/lib/lenses';
 import { findRaceOdds, formatFetchedAt, type OddsDay } from '@/lib/odds';
 import {
@@ -812,6 +813,11 @@ function PatternCard({
           <span className="text-[11px] text-text-mute">
             （1点 {unitYen.toLocaleString('ja-JP')}円 × {pattern.points}点 ={' '}
             {(unitYen * pattern.points).toLocaleString('ja-JP')}円 に対して）
+          </span>
+          {/* パーセントだけでは「儲かる」と読める。金額に直して意味を書く */}
+          <span className="mt-0.5 block text-[11px] text-text-mute">
+            {describeRecovery(pattern.expectedValue * 100, unitYen * pattern.points)}。
+            <strong className="text-text-main">予想が当たる前提の数字です。</strong>
           </span>
         </p>
       ) : null}

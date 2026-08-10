@@ -22,6 +22,8 @@ interface CalendarTabProps {
   schedule: Schedule | null;
   /** 今日（YYYY-MM-DD） */
   today: string;
+  /** はじめての方への案内を開き直す */
+  onOpenGuide: () => void;
 }
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'] as const;
@@ -99,7 +101,7 @@ function SeriesCard({
   );
 }
 
-export function CalendarTab({ schedule, today }: CalendarTabProps) {
+export function CalendarTab({ schedule, today, onOpenGuide }: CalendarTabProps) {
   if (!schedule) {
     return (
       <div className="space-y-3">
@@ -153,6 +155,14 @@ export function CalendarTab({ schedule, today }: CalendarTabProps) {
           <SeriesCard key={`${entry.start}-${entry.name}`} entry={entry} today={today} />
         ))}
       </div>
+
+      <button
+        type="button"
+        onClick={onOpenGuide}
+        className="min-h-12 w-full border border-line bg-bg-panel text-sm font-bold text-text-main"
+      >
+        はじめての方へ（アプリの使いかた・舟券の種類）
+      </button>
 
       <p className="text-[11px] leading-relaxed text-text-mute">
         公式の月間スケジュールから取り込んでいます。
