@@ -19,6 +19,7 @@ import { HitCelebration } from '@/components/HitCelebration';
 import { DayPicker } from '@/components/DayPicker';
 import { ExportTab } from '@/components/ExportTab';
 import { LogList } from '@/components/LogList';
+import { CalendarTab } from '@/components/CalendarTab';
 import { OddsTab } from '@/components/OddsTab';
 import { RecordTab } from '@/components/RecordTab';
 import { StatsTab } from '@/components/StatsTab';
@@ -43,6 +44,7 @@ import { fetchBundledCard, parseRaceCard, type RaceCard } from '@/lib/raceCard';
 import { formatDateLabel, todayIso } from '@/lib/raceDate';
 import { fetchArchiveTenji, fetchBeforeInfo, type TenjiDay } from '@/lib/beforeInfo';
 import { fetchCalibration, type Calibration } from '@/lib/calibration';
+import { fetchSchedule, type Schedule } from '@/lib/calendar';
 import { fetchArchiveOdds, fetchOddsDay, formatFetchedAt, type OddsDay } from '@/lib/odds';
 import { fetchResults, type ResultDay } from '@/lib/results';
 import { formatMinutesLeft, isUrgent, minutesUntil, resolveSchedule } from '@/lib/schedule';
@@ -81,6 +83,11 @@ export default function Page() {
   const [odds, setOdds] = useState<OddsDay | null>(null);
   /** 確率モデルの較正結果。期待値の注記に使う */
   const [calibration, setCalibration] = useState<Calibration | null>(null);
+  /**
+   * 開催予定のカレンダー。住之江は月に12日ほどしか開催がない。
+   * 当日のレース進行を表す `schedule`（下の useMemo）とは別物なので名前を分ける。
+   */
+  const [calendar, setCalendar] = useState<Schedule | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   /** 的中の演出。保存した瞬間に当たっていれば流す */
   const [celebration, setCelebration] = useState<{ hits: Bet[]; token: number }>({
@@ -192,6 +199,11 @@ export default function Page() {
     /** オッズ。発売前は空で返る */
     void fetchOddsDay().then((fetched) => {
       if (fetched) setOdds(fetched);
+    });
+
+    /** 開催予定（どの日に開催があるか）。次の開催日の表示に使う */
+    void fetchSchedule().then((fetched) => {
+      if (fetched) setCalendar(fetched);
     });
 
     /** 確率モデルの較正結果。期待値の数字に必ず添えるので、無ければ期待値も控えめに出す */
@@ -665,6 +677,8 @@ export default function Page() {
             readOnly={viewing}
           />
         ) : null}
+
+        {tab === 'calendar' ? <CalendarTab schedule={calendar} today={todayIso()} /> : null}
 
         {tab === 'odds' ? (
           <OddsTab

@@ -33,6 +33,38 @@ run() {
   "$@" || echo "  失敗（終了コード $?）。続けます。"
 }
 
+SCHEDULE_JSON="$ROOT/apps/suminoe-log/public/schedule.json"
+
+# 開催予定を更新する。住之江は月に12日ほどしか開催がないので、
+# これが無いと非開催日に404を取りに行くだけの実行を繰り返すことになる。
+#
+# **1日1回だけ取り直す。** 収集は15分おきに回るが、開催予定はその頻度で変わらない。
+# 毎回取りに行くと公式サイトへ1日120回問い合わせることになる。
+if python "$ROOT/.github/scripts/schedule_status.py" --stale "$SCHEDULE_JSON"; then
+  (cd "$READ_DIR" && run python schedule.py --months 2)
+else
+  echo "開催予定は取得済みです（24時間以内）。取り直しません。"
+fi
+
+# 今日が開催日でなければ、ここで終わる。
+#
+# **予定が読めないときは止めない。** 予定の取得に失敗したせいで収集まで止まると、
+# 開催日のオッズを丸ごと失う。オッズは過去に遡って取れないので、
+# 「無駄に1回走る」より「1日分を失う」ほうがはるかに高くつく。
+STATUS="$(python "$ROOT/.github/scripts/schedule_status.py" --check "$SCHEDULE_JSON" "$TARGET_DATE" 2>/dev/null || echo "unknown")"
+case "$STATUS" in
+  race)
+    echo "$TARGET_DATE は開催日です。収集を続けます。"
+    ;;
+  no-race:*)
+    echo "$TARGET_DATE は住之江の開催がありません。収集しません（次の開催: ${STATUS#no-race:}）。"
+    exit 0
+    ;;
+  *)
+    echo "開催予定を判定できませんでした。念のため収集を続けます。"
+    ;;
+esac
+
 case "$JOB" in
   refresh)
     # 番組表。当日早朝に公開される。取れたらアプリ用の JSON に反映する

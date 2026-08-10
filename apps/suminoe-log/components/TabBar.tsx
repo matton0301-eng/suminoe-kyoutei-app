@@ -7,6 +7,7 @@ export const TABS = [
   { key: 'bets', label: '買い目' },
   { key: 'odds', label: 'オッズ' },
   { key: 'record', label: '記録' },
+  { key: 'calendar', label: '開催' },
   { key: 'stats', label: '集計' },
   { key: 'tally', label: '収支' },
   { key: 'export', label: '書出' },
