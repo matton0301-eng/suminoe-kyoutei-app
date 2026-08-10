@@ -24,7 +24,7 @@ import {
 import type { Bet } from '@/lib/bets';
 import { betTypeGuide } from '@/lib/glossary';
 import type { PayoutKey } from '@/lib/results';
-import { BOAT_COLORS, BOATS, type Boat } from '@/lib/types';
+import { BOAT_COLORS, BOATS } from '@/lib/types';
 
 import { StakePicker, stakeYen } from './StakePicker';
 
