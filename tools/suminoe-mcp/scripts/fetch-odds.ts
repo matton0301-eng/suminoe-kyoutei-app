@@ -54,6 +54,18 @@ interface RaceOddsPayload {
   fetchedAt: string | null;
   trifecta: Record<string, number> | null;
   trio: Record<string, number> | null;
+  /** 2連単。着順どおり */
+  exacta?: Record<string, number> | null;
+  /** 2連複。順不同 */
+  quinella?: Record<string, number> | null;
+  /** 単勝 */
+  win?: Record<string, number> | null;
+  /**
+   * 拡連複と複勝は**幅**で出る（「1.8-2.1」）。[下限, 上限] で持つ。
+   * 平均に潰すと嘘になるので、両端をそのまま残す。
+   */
+  wide?: Record<string, [number, number]> | null;
+  place?: Record<string, [number, number]> | null;
 }
 
 function toMap(odds: RaceOdds | null): Record<string, number> | null {
@@ -61,6 +73,17 @@ function toMap(odds: RaceOdds | null): Record<string, number> | null {
   const map: Record<string, number> = {};
   for (const entry of odds.entries) {
     if (entry.odds !== null) map[entry.combo.join('-')] = entry.odds;
+  }
+  return Object.keys(map).length > 0 ? map : null;
+}
+
+/** 幅を持つ賭式（拡連複・複勝）。上限が無ければ下限と同じ値を入れる */
+function toRangeMap(odds: RaceOdds | null): Record<string, [number, number]> | null {
+  if (!odds) return null;
+  const map: Record<string, [number, number]> = {};
+  for (const entry of odds.entries) {
+    if (entry.odds === null) continue;
+    map[entry.combo.join('-')] = [entry.odds, entry.oddsMax ?? entry.odds];
   }
   return Object.keys(map).length > 0 ? map : null;
 }
@@ -85,12 +108,21 @@ function parseArgs(argv: string[]): { date: string } {
 }
 
 /** 取得時刻を除いて中身が同じか。オッズが動いていなければデプロイしない */
+/**
+ * 前回と中身が同じか。取得時刻は毎回変わるので比較から外す。
+ *
+ * **賭式を足したらここにも足すこと。** 一部の賭式しか見ていないと、
+ * 「3連単は同じだが2連単が増えた」という更新を「変化なし」と誤判定して
+ * 永久に書き出さなくなる（実際に全賭式を足した8/10に踏んだ）。
+ */
 function isSameContent(previous: unknown, current: RaceOddsPayload[]): boolean {
   if (typeof previous !== 'object' || previous === null) return false;
   const record = previous as Record<string, unknown>;
   if (!Array.isArray(record.races)) return false;
   const strip = (races: RaceOddsPayload[]) =>
-    JSON.stringify(races.map(({ raceNo, trifecta, trio }) => ({ raceNo, trifecta, trio })));
+    JSON.stringify(
+      races.map(({ fetchedAt: _ignored, ...rest }) => rest),
+    );
   return strip(record.races as RaceOddsPayload[]) === strip(current);
 }
 
@@ -104,10 +136,17 @@ async function main(): Promise<void> {
 
   for (const raceNo of RACES) {
     // fetchOdds が 1.5 秒間隔を守る（公式サイトへの礼儀）
-    const [trifecta, trio] = [
-      await fetchOdds(date, raceNo, 'trifecta'),
-      await fetchOdds(date, raceNo, 'trio'),
-    ];
+    /**
+     * 全賭式を取る。**ページは5枚**（3連単・3連複・2連単2連複・拡連複・単勝複勝）。
+     * odds2tf と oddstf は1枚に2賭式が載るので、lib 側でHTMLを使い回して二度取りしない。
+     */
+    const trifecta = await fetchOdds(date, raceNo, 'trifecta');
+    const trio = await fetchOdds(date, raceNo, 'trio');
+    const exacta = await fetchOdds(date, raceNo, 'exacta');
+    const quinella = await fetchOdds(date, raceNo, 'quinella');
+    const wide = await fetchOdds(date, raceNo, 'wide');
+    const win = await fetchOdds(date, raceNo, 'win');
+    const place = await fetchOdds(date, raceNo, 'place');
 
     const trifectaMap = toMap(trifecta);
     const trioMap = toMap(trio);
@@ -119,14 +158,21 @@ async function main(): Promise<void> {
       fetchedAt: ok ? jstNow() : null,
       trifecta: trifectaMap,
       trio: trioMap,
+      exacta: toMap(exacta),
+      quinella: toMap(quinella),
+      win: toMap(win),
+      wide: toRangeMap(wide),
+      place: toRangeMap(place),
     });
 
     if (ok) {
       fetched += 1;
       consecutiveFailures = 0;
       console.log(
-        `  ${raceNo}R: 3連単 ${Object.keys(trifectaMap ?? {}).length} 通り / ` +
-          `3連複 ${Object.keys(trioMap ?? {}).length} 通り`,
+        `  ${raceNo}R: 3連単${Object.keys(trifectaMap ?? {}).length} 3連複${Object.keys(trioMap ?? {}).length} ` +
+          `2連単${Object.keys(toMap(exacta) ?? {}).length} 2連複${Object.keys(toMap(quinella) ?? {}).length} ` +
+          `拡連複${Object.keys(toRangeMap(wide) ?? {}).length} 単勝${Object.keys(toMap(win) ?? {}).length} ` +
+          `複勝${Object.keys(toRangeMap(place) ?? {}).length}`,
       );
     } else {
       consecutiveFailures += 1;

@@ -1,5 +1,5 @@
 /**
- * オッズ（3連単・3連複）の取り込み。
+ * オッズの取り込み（全賭式）。
  *
  * `tools/suminoe-mcp/scripts/fetch-odds.ts` が `public/odds.json` に書き出す。
  *
@@ -23,6 +23,19 @@ export interface RaceOddsData {
   trifecta: Map<string, number>;
   /** キーは "1-2-3"（昇順）。未確定の組み合わせは入っていない */
   trio: Map<string, number>;
+  /** 2連単。キーは "1-2"（着順どおり） */
+  exacta: Map<string, number>;
+  /** 2連複。キーは "1-2"（昇順） */
+  quinella: Map<string, number>;
+  /** 単勝。キーは "1" */
+  win: Map<string, number>;
+  /**
+   * 拡連複。キーは "1-2"（昇順）。値は [下限, 上限]。
+   * **1つの数字ではない。** 3着までに入る組み合わせ次第で払戻が変わるため。
+   */
+  wide: Map<string, [number, number]>;
+  /** 複勝。キーは "1"。値は [下限, 上限] */
+  place: Map<string, [number, number]>;
 }
 
 export interface OddsDay {
@@ -61,6 +74,24 @@ function parseOddsMap(raw: unknown, keyPattern: RegExp): Map<string, number> {
 
 const TRIFECTA_KEY = /^[1-6]-[1-6]-[1-6]$/;
 const TRIO_KEY = /^[1-6]-[1-6]-[1-6]$/;
+const PAIR_KEY = /^[1-6]-[1-6]$/;
+const SINGLE_KEY = /^[1-6]$/;
+
+/** 幅を持つ賭式（拡連複・複勝）。[下限, 上限] の形でだけ受け取る */
+function parseRangeMap(raw: unknown, keyPattern: RegExp): Map<string, [number, number]> {
+  const record = asRecord(raw);
+  const map = new Map<string, [number, number]>();
+  if (!record) return map;
+  for (const [key, value] of Object.entries(record)) {
+    if (!keyPattern.test(key)) continue;
+    if (!Array.isArray(value) || value.length !== 2) continue;
+    const low = asNumberOrNull(value[0]);
+    const high = asNumberOrNull(value[1]);
+    if (low === null || high === null || low <= 0 || high < low) continue;
+    map.set(key, [low, high]);
+  }
+  return map;
+}
 
 function parseRace(raw: unknown): RaceOddsData | null {
   const record = asRecord(raw);
@@ -73,6 +104,11 @@ function parseRace(raw: unknown): RaceOddsData | null {
     fetchedAt: typeof record.fetchedAt === 'string' ? record.fetchedAt : null,
     trifecta: parseOddsMap(record.trifecta, TRIFECTA_KEY),
     trio: parseOddsMap(record.trio, TRIO_KEY),
+    exacta: parseOddsMap(record.exacta, PAIR_KEY),
+    quinella: parseOddsMap(record.quinella, PAIR_KEY),
+    win: parseOddsMap(record.win, SINGLE_KEY),
+    wide: parseRangeMap(record.wide, PAIR_KEY),
+    place: parseRangeMap(record.place, SINGLE_KEY),
   };
 }
 

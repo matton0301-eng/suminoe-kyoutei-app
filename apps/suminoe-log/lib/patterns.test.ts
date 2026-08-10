@@ -51,7 +51,18 @@ function fairOdds(scale = 1): RaceOddsData {
   for (const [key, p] of PROBABILITY.trifecta) trifecta.set(key, (TAKE_OUT / p) * scale);
   const trio = new Map<string, number>();
   for (const [key, p] of PROBABILITY.trio) trio.set(key, (TAKE_OUT / p) * scale);
-  return { raceNo: 1, fetchedAt: '2026-08-09T15:05:00+09:00', trifecta, trio };
+  // 買い目は3連単・3連複しか使わない。他の賭式は空で足りる
+  return {
+    raceNo: 1,
+    fetchedAt: '2026-08-09T15:05:00+09:00',
+    trifecta,
+    trio,
+    exacta: new Map(),
+    quinella: new Map(),
+    win: new Map(),
+    wide: new Map(),
+    place: new Map(),
+  };
 }
 
 const patternsOf = (odds: RaceOddsData | null) => {
