@@ -45,7 +45,7 @@ import { fetchBundledCard, parseRaceCard, type RaceCard } from '@/lib/raceCard';
 import { formatDateLabel, todayIso } from '@/lib/raceDate';
 import { fetchArchiveTenji, fetchBeforeInfo, type TenjiDay } from '@/lib/beforeInfo';
 import { fetchCalibration, type Calibration } from '@/lib/calibration';
-import { fetchSchedule, type Schedule } from '@/lib/calendar';
+import { daysUntil, fetchSchedule, nextRaceDayFrom, type Schedule } from '@/lib/calendar';
 import { fetchLensRecord, type LensRecord } from '@/lib/lenses';
 import { fetchArchiveOdds, fetchOddsDay, formatFetchedAt, type OddsDay } from '@/lib/odds';
 import { fetchResults, type ResultDay } from '@/lib/results';
@@ -526,7 +526,7 @@ export default function Page() {
 
   /** 締切時刻から「いま見るべきレース」を割り出す */
   const schedule = useMemo(
-    () => (raceCard && now ? resolveSchedule(raceCard.races, now) : null),
+    () => (raceCard && now ? resolveSchedule(raceCard.races, now, raceCard.date) : null),
     [raceCard, now],
   );
 
@@ -550,6 +550,13 @@ export default function Page() {
     [raceCard, form.raceNo],
   );
 
+  /** 次の開催日と、そこまでの日数。開催が無い日の案内に使う */
+  const nextRaceDay = useMemo(() => nextRaceDayFrom(calendar, todayIso()), [calendar]);
+  const daysUntilNext = useMemo(
+    () => (nextRaceDay ? daysUntil(todayIso(), nextRaceDay) : null),
+    [nextRaceDay],
+  );
+
   /** 収支タブ用の通算集計。結果が出ていなければ null */
   const tally = useMemo(
     () => (activeCard && activeResults ? tallyDay(activeCard, activeResults) : null),
@@ -563,8 +570,8 @@ export default function Page() {
    * 記録の続きから入れている場合、見ているレースと次に締まるレースは別になるため。
    */
   const selectedMinutesLeft = useMemo(
-    () => (currentRace && now ? minutesUntil(currentRace.deadline, now) : null),
-    [currentRace, now],
+    () => (currentRace && now ? minutesUntil(currentRace.deadline, now, raceCard?.date) : null),
+    [currentRace, now, raceCard?.date],
   );
 
   /**
@@ -650,10 +657,29 @@ export default function Page() {
             </button>
           </div>
         ) : viewingPastDay ? (
-          <p className="mb-3 rounded-lg border border-line bg-bg-panel px-3 py-2 text-xs text-text-mute">
-            今日ではなく <span className="tnum text-text-main">{formatDateLabel(raceDate)}</span>{' '}
-            のデータを表示しています。新しい出走表が用意されると自動で切り替わります。
-          </p>
+          /*
+            **前日の出走表を今日のものとして出さない。**
+            8/10 に前日の出走表が残っていて、締切が近いレースがあるように見えた。
+            開催が無い日は、無いとはっきり書いて次の開催日を出す。
+          */
+          <section className="mb-3 border border-line bg-bg-panel px-3 py-3">
+            <p className="text-sm font-black text-text-main">
+              本日 {formatDateLabel(todayIso())} は住之江の開催がありません
+            </p>
+            {nextRaceDay ? (
+              <p className="tnum mt-1 text-sm text-text-main">
+                次の開催は{' '}
+                <strong className="text-accent">{formatDateLabel(nextRaceDay)}</strong>
+                {daysUntilNext !== null && daysUntilNext > 0 ? `（あと${daysUntilNext}日）` : ''}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-text-mute">次の開催はまだ公表されていません。</p>
+            )}
+            <p className="mt-2 text-xs text-text-mute">
+              下に出ているのは <span className="tnum">{formatDateLabel(raceDate)}</span>{' '}
+              の結果です。開催日の朝になると自動で切り替わります。
+            </p>
+          </section>
         ) : null}
         {viewing && archiveNotice ? (
           <p className="mb-3 rounded-lg border border-line bg-bg-panel px-3 py-2 text-xs text-text-mute">

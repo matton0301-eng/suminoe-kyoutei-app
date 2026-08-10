@@ -10,7 +10,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 
 import type { CardRace } from './raceCard';
-import { formatMinutesLeft, isUrgent, parseDeadlineMinutes, resolveSchedule } from './schedule';
+import {
+  formatMinutesLeft,
+  isUrgent,
+  minutesUntil,
+  parseDeadlineMinutes,
+  resolveSchedule,
+} from './schedule';
 
 
 function makeRace(raceNo: number, deadline: string): CardRace {
@@ -125,3 +131,53 @@ describe('formatMinutesLeft / isUrgent', () => {
 // --- 展示反映 ---
 
 
+
+/**
+ * 出走表の日付を見ずに時刻だけで比べると、前日のレースが「まもなく締切」になる。
+ * 2026-08-10 の 16:18 に、前日（8/9）の4R（16:28締切）が
+ * 「締切10分」と表示された。実機で踏んだ不具合。
+ */
+describe('前日の出走表を今日のものとして扱わない', () => {
+  const races = [
+    { raceNo: 1, deadline: '15:17' },
+    { raceNo: 4, deadline: '16:28' },
+    { raceNo: 12, deadline: '20:30' },
+  ] as CardRace[];
+
+  /** 8/10 16:18 */
+  const now = new Date(2026, 7, 10, 16, 18);
+
+  it('前日の出走表なら、すべて締切済みになる', () => {
+    const schedule = resolveSchedule(races, now, '2026-08-09');
+    assert.equal(schedule.closed, true);
+    assert.equal(schedule.finishedCount, 3);
+    assert.ok((schedule.minutesLeft ?? 0) < 0);
+  });
+
+  it('前日のレースの残り時間は必ず負になる', () => {
+    assert.ok((minutesUntil('16:28', now, '2026-08-09') ?? 0) < 0, '「あと10分」にしない');
+    assert.equal(minutesUntil('16:28', now, '2026-08-09'), 10 - 1440);
+  });
+
+  it('当日なら従来どおり', () => {
+    assert.equal(minutesUntil('16:28', now, '2026-08-10'), 10);
+    const schedule = resolveSchedule(races, now, '2026-08-10');
+    assert.equal(schedule.currentRaceNo, 4);
+    assert.equal(schedule.closed, false);
+  });
+
+  it('翌日の出走表なら、まだ全部これから', () => {
+    const schedule = resolveSchedule(races, now, '2026-08-11');
+    assert.equal(schedule.currentRaceNo, 1);
+    assert.equal(schedule.finishedCount, 0);
+    assert.ok((schedule.minutesLeft ?? 0) > 0);
+  });
+
+  it('日付を渡さなければ今日として扱う（従来の呼び出しを壊さない）', () => {
+    assert.equal(minutesUntil('16:28', now), 10);
+  });
+
+  it('締切済みの表示になる', () => {
+    assert.equal(formatMinutesLeft(minutesUntil('16:28', now, '2026-08-09')), '締切済み');
+  });
+});

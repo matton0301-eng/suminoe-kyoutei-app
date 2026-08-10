@@ -195,12 +195,6 @@ export function BetsTab({
     return map;
   }, [card, actualCourseRates, resultCount, odds, calibration]);
 
-  /** 結果が確定しているレース番号（選択ボタンに印を出す） */
-  const finishedRaceNos = useMemo(() => {
-    if (!results || !card || results.date !== card.date) return new Set<number>();
-    return new Set(results.races.filter((race) => race.ok).map((race) => race.raceNo));
-  }, [results, card]);
-
   if (!card) {
     if (readOnly) {
       return (
@@ -287,7 +281,7 @@ export function BetsTab({
             const isActive = race.raceNo === entry.raceNo;
             const heat = heatByRace.get(entry.raceNo);
             // 締切が近いレースは枠を明滅させる。締切を過ぎたものは沈める
-            const left = now ? minutesUntil(entry.deadline, now) : null;
+            const left = now ? minutesUntil(entry.deadline, now, card.date) : null;
             const closingSoon = left !== null && left >= 0 && left <= 10;
             const closed = left !== null && left < 0;
             // 判定は「買うかどうか」の結論。冷たい青から熱い赤へ、そのまま温度で出す
@@ -332,9 +326,6 @@ export function BetsTab({
                     {entry.verdict === '見送り' ? '見送' : (entry.verdict ?? '—')}
                   </span>
                 </span>
-                {finishedRaceNos.has(entry.raceNo) ? (
-                  <span aria-hidden className="mx-auto mt-0.5 block h-1 w-1 bg-accent" />
-                ) : null}
                 {/* 期待度の帯。判定とは別軸なので、下端に横で引いて混ざらないようにする */}
                 {heat && heat.level > 0 ? (
                   <span

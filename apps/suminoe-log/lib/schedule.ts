@@ -6,10 +6,15 @@
  * 次に締切が来るレースを自動で選べるようにする。
  *
  * 住之江のナイターは15時台〜20時半で、日付をまたがない。
- * そのため時刻の比較は「当日の分」だけで足りる。
+ *
+ * **ただし時刻だけで比べてはいけない。** 出走表は前日のものが残っていることがあり、
+ * 時刻だけを見ると「昨日の4R（16:28締切）があと10分で締切」と出る
+ * （2026-08-10 の16:18に実機で踏んだ）。**必ず出走表の日付と一緒に判断する。**
  */
 
+import { daysUntil } from './calendar';
 import type { CardRace } from './raceCard';
+import { todayIso } from './raceDate';
 
 export interface RaceSchedule {
   /** 次に締切が来るレース番号。全部過ぎていれば最後のレース */
@@ -39,14 +44,34 @@ function nowMinutes(now: Date): number {
 }
 
 /**
+ * 出走表の日付が今日から何分ずれているか。
+ *
+ * 昨日の出走表なら -1440 分。これを締切時刻に足すことで、
+ * 前日のレースは必ず「締切済み」になる。
+ * 日付が分からなければ 0（今日として扱う。従来どおりの動き）。
+ */
+function dayOffsetMinutes(now: Date, cardDate?: string | null): number {
+  if (!cardDate) return 0;
+  return daysUntil(todayIso(now), cardDate) * 24 * 60;
+}
+
+/**
  * 締切時刻を見て、いま注目すべきレースを決める。
  *
  * 「次に締切が来るレース」= まだ締切が過ぎていない最小のレース番号。
  * 全部過ぎていれば最後のレースを返す（振り返り用）。
  */
-export function resolveSchedule(races: CardRace[], now: Date = new Date()): RaceSchedule {
+export function resolveSchedule(
+  races: CardRace[],
+  now: Date = new Date(),
+  cardDate?: string | null,
+): RaceSchedule {
+  const offset = dayOffsetMinutes(now, cardDate);
   const withDeadline = races
-    .map((race) => ({ race, at: parseDeadlineMinutes(race.deadline) }))
+    .map((race) => {
+      const at = parseDeadlineMinutes(race.deadline);
+      return { race, at: at === null ? null : at + offset };
+    })
     .filter((entry): entry is { race: CardRace; at: number } => entry.at !== null)
     .sort((a, b) => a.race.raceNo - b.race.raceNo);
 
@@ -80,10 +105,14 @@ export function resolveSchedule(races: CardRace[], now: Date = new Date()): Race
  * 「次に締まるレース」ではなく「いま画面で見ているレース」の残り時間を出すために使う。
  * 見ているレースの締切が知りたいのが自然なので、こちらを表示に使う。
  */
-export function minutesUntil(deadline: string, now: Date = new Date()): number | null {
+export function minutesUntil(
+  deadline: string,
+  now: Date = new Date(),
+  cardDate?: string | null,
+): number | null {
   const at = parseDeadlineMinutes(deadline);
   if (at === null) return null;
-  return at - nowMinutes(now);
+  return at + dayOffsetMinutes(now, cardDate) - nowMinutes(now);
 }
 
 /** 残り時間を人が読む形にする。 */
