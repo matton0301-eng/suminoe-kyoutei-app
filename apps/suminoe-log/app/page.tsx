@@ -610,10 +610,22 @@ export default function Page() {
             <button
               type="button"
               onClick={openDayPicker}
-              className="tnum min-h-11 rounded-lg px-2 text-sm text-text-mute underline decoration-dotted underline-offset-4"
-              aria-label="日付を選ぶ"
+              className="min-h-11 rounded-lg px-2 text-left underline decoration-dotted underline-offset-4"
+              aria-label={`表示中の日 ${formatDateLabel(activeDate)}。押すと日付を選べます`}
             >
-              {formatDateLabel(activeDate)}
+              {/*
+                **これは「今日」ではなく「表示中の日」。**
+                開催が無い日は前の開催日の内容を出しているので、
+                日付だけを置くと「今日は8/9」と読めてしまう（実機で指摘を受けた）。
+                何の日付なのかを一緒に書く。
+              */}
+              <span className="block text-[9px] leading-none text-text-mute">表示中</span>
+              <span className="tnum block text-sm leading-tight text-text-mute">
+                {formatDateLabel(activeDate)}
+                {activeDate === todayIso() ? (
+                  <span className="ml-1 text-[9px] text-accent">今日</span>
+                ) : null}
+              </span>
             </button>
             <ThemeToggle />
           </div>
