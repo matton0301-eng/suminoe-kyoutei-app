@@ -372,7 +372,6 @@ input[type='text'] {
   opacity: 0;
   filter: blur(2px);
   animation: hit-tease-sweep 0.85s cubic-bezier(0.3, 0, 0.2, 1) 0.4s forwards;
-  will-change: transform, opacity;
 }
 
 @keyframes hit-tease-sweep {
@@ -382,25 +381,31 @@ input[type='text'] {
 }
 
 /**
- * 集中線。SVG で放射状の楔を描き、ゆっくり回す。
- * 円錐グラデーションより線が立つ。**画像を持たないので数KBで済む。**
+ * 集中線。SVG で放射状の楔を描く。円錐グラデーションより線が立つ。
+ * **画像を持たないので数KBで済む。**
+ *
+ * **回し続けない。** 2026-08-10 まで `hit-spin ... infinite` を掛けていた。
+ * 全画面の合成レイヤーを毎フレーム描き直すことになり、
+ * 演出が出ている最中に画面が更新されると**そこで固まった**（実機ではなく開発機で発覚）。
+ * 元々このプロジェクトには「虹は動かさない」という決めがあり、それを自分で破っていた。
+ * 入るときに一度だけ回して止める。止まっていても十分目立つ。
  */
 .hit-lines {
   position: absolute;
   inset: -25%;
   opacity: 0;
   color: #fff;
-  animation: hit-lines-in 0.6s ease-out 1.3s forwards, hit-spin 9s linear 1.3s infinite;
-  will-change: transform, opacity;
+  animation: hit-lines-in 0.8s cubic-bezier(0.2, 0.9, 0.3, 1) 1.3s forwards;
 }
 
 .hit-tier-4 .hit-lines { color: #ffd60a; }
 
 @keyframes hit-lines-in {
-  from { opacity: 0; transform: scale(1.25); }
-  to { opacity: 0.28; transform: scale(1); }
+  from { opacity: 0; transform: rotate(-14deg) scale(1.35); }
+  to { opacity: 0.28; transform: rotate(0deg) scale(1); }
 }
 
+/** 虹。**静止させる。** 理由は `.hit-lines` と同じ */
 .hit-burst {
   position: absolute;
   inset: -20%;
@@ -415,8 +420,8 @@ input[type='text'] {
     #ff2d55
   );
   opacity: 0;
-  animation: hit-burst-in 0.5s ease-out 0.7s forwards, hit-spin 14s linear 0.7s infinite;
-  will-change: transform, opacity;
+  transform: scale(1.35);
+  animation: hit-burst-in 0.5s ease-out 0.7s forwards;
 }
 
 @keyframes hit-burst-in {
@@ -424,16 +429,11 @@ input[type='text'] {
   to { opacity: 0.26; }
 }
 
-.hit-tier-3 .hit-burst { animation-name: hit-burst-in-3, hit-spin; }
-.hit-tier-4 .hit-burst { animation-name: hit-burst-in-4, hit-spin; }
+.hit-tier-3 .hit-burst { animation-name: hit-burst-in-3; }
+.hit-tier-4 .hit-burst { animation-name: hit-burst-in-4; }
 
 @keyframes hit-burst-in-3 { from { opacity: 0; } to { opacity: 0.42; } }
 @keyframes hit-burst-in-4 { from { opacity: 0; } to { opacity: 0.5; } }
-
-@keyframes hit-spin {
-  from { transform: rotate(0deg) scale(1.35); }
-  to { transform: rotate(360deg) scale(1.35); }
-}
 
 .hit-word {
   position: relative;

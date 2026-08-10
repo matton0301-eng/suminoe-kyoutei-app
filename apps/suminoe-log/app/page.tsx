@@ -11,7 +11,7 @@
  * 記録はその日付ごとに保存する（`lib/raceDate.ts`）。
  */
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import { BetsTab } from '@/components/BetsTab';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -36,10 +36,10 @@ import type { MultiTally } from '@/lib/multiTally';
 import { loadMultiTally } from '@/lib/totalLoader';
 import {
   createId,
+  foldForm,
   formHasContent,
   formReducer,
   nextRaceNo,
-  toRaceLog,
 } from '@/lib/formReducer';
 import { toCsv, toPlainText } from '@/lib/exporters';
 import { fetchBundledCard, parseRaceCard, type RaceCard } from '@/lib/raceCard';
@@ -96,15 +96,22 @@ export default function Page() {
   /** はじめての人への案内。閉じたら二度と出さない（開催タブから開き直せる） */
   const [guideOpen, setGuideOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  /** 的中の演出。保存した瞬間に当たっていれば流す */
+  /** 的中の演出。結果が入った時点で流す */
   const [celebration, setCelebration] = useState<{
     hits: Bet[];
     multiples: (number | null)[];
     returnedYen: number | null;
     token: number;
   }>({ hits: [], multiples: [], returnedYen: null, token: 0 });
-  /** 演出を出したレース。同じレースで二度出さない */
-  const [celebrated, setCelebrated] = useState<Set<string>>(() => new Set());
+  /**
+   * 演出を出し終えたレース。同じレースで二度出さない。
+   *
+   * **state ではなく ref。** state にすると「見終わった」と印を付けるたびに
+   * 再レンダーが起き、その再レンダーがまた判定を呼ぶ。
+   * 2026-08-10 に、演出が出ている最中に保存を押すと画面が固まる不具合になっていた。
+   * 印は画面に出す値ではないので、再レンダーを起こす必要がない。
+   */
+  const celebratedRef = useRef<Set<string>>(new Set());
   /** 締切までの残り時間を出すための現在時刻。1分ごとに進める */
   const [now, setNow] = useState<Date | null>(null);
   /** 起動時の自動選択を一度だけ行うためのフラグ */
@@ -278,46 +285,8 @@ export default function Page() {
     [raceDate],
   );
 
-  /**
-   * フォームの内容を記録の配列に畳み込む。保存も画面遷移もしない、純粋な組み立て。
-   *
-   * 同じレースの記録があれば**上書きする**。
-   * 買い目タブの「買った」は記録を先に作るので、そのあと結果を保存したときに
-   * 新しい行を足すと 1R が2つできてしまう（実際に踏んだ）。
-   */
   const foldIntoLogs = useCallback(
-    (source: FormState, current: RaceLog[]) => {
-      const existing =
-        source.editingId !== null
-          ? (current.find((log) => log.id === source.editingId) ?? null)
-          : (current.find((log) => log.raceNo === source.raceNo) ?? null);
-
-      /**
-       * 買い目タブから入れた舟券はフォームに無いことがあるので、既存の記録から引き継ぐ。
-       *
-       * **ただし「見（ケン）」が立っているときは引き継がない。**
-       * 引き継ぐと「舟券を買った」と「買わずに見た」が同じ記録に同居する。
-       * 見送ったという申告のほうが後から出た意思なので、そちらを採る。
-       */
-      const bets = source.ken
-        ? []
-        : source.bets.length > 0
-          ? source.bets
-          : (existing?.bets ?? []);
-
-      const saved: RaceLog = {
-        ...toRaceLog(source, existing?.id ?? createId()),
-        bets,
-        ken: source.ken || (bets.length === 0 && (existing?.ken ?? false)),
-        savedAt: existing?.savedAt ?? new Date().toISOString(),
-      };
-
-      const next = existing
-        ? current.map((log) => (log.id === saved.id ? saved : log))
-        : [...current, saved];
-
-      return { saved, next, isUpdate: existing !== null, bets };
-    },
+    (source: FormState, current: RaceLog[]) => foldForm(source, current),
     [],
   );
 
@@ -449,6 +418,8 @@ export default function Page() {
   const handleBuy = useCallback(
     (raceNo: number, bets: Bet[]) => {
       const existing = logs.find((log) => log.raceNo === raceNo);
+      // フォームにも同じ記録を指させるため、id を先に決めておく
+      const logId = existing?.id ?? createId();
       const next = existing
         ? logs.map((log) =>
             log.raceNo === raceNo
@@ -458,7 +429,7 @@ export default function Page() {
         : [
             ...logs,
             {
-              id: createId(),
+              id: logId,
               raceNo,
               bets,
               ken: false,
@@ -473,7 +444,7 @@ export default function Page() {
           ];
       persist(next);
       // 記録タブで同じレースを開いていれば、フォームにも映して一覧に出す
-      if (form.raceNo === raceNo) dispatch({ type: 'addBets', bets });
+      if (form.raceNo === raceNo) dispatch({ type: 'addBets', bets, logId });
       const total = bets.reduce((sum, bet) => sum + bet.amountYen, 0);
       setToast(`${raceNo}R に ${bets.length}点（${total.toLocaleString('ja-JP')}円）を記録しました`);
     },
@@ -569,30 +540,45 @@ export default function Page() {
   );
 
   /**
-   * 結果が入ったら祝う。
+   * 次に祝うべき的中を1つ出す。
    *
    * **着順の手入力を外したので、保存の瞬間には当たりが分からない。**
-   * 結果は15分おきの収集で自動的に入るので、入った時点で出す。
+   * 結果は15分おきの収集で自動的に入るので、入った時点で出す。判定は `lib/celebration.ts`。
    *
-   * 判定は `lib/celebration.ts`。ここでは effect ではなく
-   * レンダー中に同期する（React が推奨する形。この画面の他の箇所と揃えてある）。
+   * 外れたレースは印だけ付けて次へ進む（`for(;;)` は毎周 `celebratedRef` に
+   * 印を足すので、記録の数だけ回れば必ず抜ける）。
+   * 出している最中は次を出さない。終わったら `onDone` からここへ戻ってくる。
    */
-  const pendingCelebration = useMemo(
-    () => findCelebration(activeResults, activeDate, activeLogs, celebrated),
-    [activeResults, activeDate, activeLogs, celebrated],
-  );
-  if (pendingCelebration) {
-    setCelebrated((current) => new Set(current).add(pendingCelebration.key));
-    // 外れたレースも「見終わった」として記録するが、演出は出さない
-    if (pendingCelebration.hits.length > 0) {
+  const showNextCelebration = useCallback(() => {
+    for (;;) {
+      const next = findCelebration(activeResults, activeDate, activeLogs, celebratedRef.current);
+      if (!next) return;
+      celebratedRef.current.add(next.key);
+      if (next.hits.length === 0) continue;
       setCelebration((current) => ({
-        hits: pendingCelebration.hits,
-        multiples: pendingCelebration.multiples,
-        returnedYen: pendingCelebration.returnedYen,
+        hits: next.hits,
+        multiples: next.multiples,
+        returnedYen: next.returnedYen,
         token: current.token + 1,
       }));
+      return;
     }
-  }
+  }, [activeResults, activeDate, activeLogs]);
+
+  useEffect(() => {
+    // 出ている最中は待つ。閉じたときにこの effect がもう一度走り、次の的中を出す
+    if (celebration.hits.length > 0) return;
+    showNextCelebration();
+  }, [showNextCelebration, celebration.hits.length]);
+
+  /**
+   * 演出を閉じる。**毎レンダーで作り直さない。**
+   * 作り直すと `HitCelebration` の自動で閉じるタイマーが張り直され、
+   * 画面が更新され続けるあいだ閉じなくなる。
+   */
+  const closeCelebration = useCallback(() => {
+    setCelebration((current) => (current.hits.length === 0 ? current : { ...current, hits: [] }));
+  }, []);
 
   /** 次の開催日と、そこまでの日数。開催が無い日の案内に使う */
   const nextRaceDay = useMemo(() => nextRaceDayFrom(calendar, todayIso()), [calendar]);
@@ -837,7 +823,7 @@ export default function Page() {
         multiples={celebration.multiples}
         returnedYen={celebration.returnedYen}
         token={celebration.token}
-        onDone={() => setCelebration((current) => ({ ...current, hits: [] }))}
+        onDone={closeCelebration}
       />
 
       <TabBar active={tab} onChange={setTab} />

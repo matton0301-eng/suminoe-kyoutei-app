@@ -83,7 +83,19 @@ function useCountUp(target: number | null, token: number): number | null {
       else setValue(target);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+
+    /**
+     * **回らなくても最後は必ず実額にする。**
+     * `requestAnimationFrame` は画面が見えていないあいだ止まる（端末をロックした、
+     * 別のアプリに移った、など）。止まったままだと 0円 のまま残るので、
+     * 演出の尺のぶんだけ待って実額を入れておく。
+     */
+    const settle = window.setTimeout(() => setValue(target), COUNT_START_MS + COUNT_DURATION_MS);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(settle);
+    };
   }, [target, token]);
 
   return value;
@@ -137,7 +149,6 @@ export function HitCelebration({
   }, [token, hits.length, duration, onDone]);
 
   if (hits.length === 0) return null;
-
   const confetti = CONFETTI_BY_TIER[grade.tier] ?? 0;
 
   return (
