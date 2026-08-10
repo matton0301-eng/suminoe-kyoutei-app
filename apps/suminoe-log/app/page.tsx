@@ -66,7 +66,7 @@ import {
 } from '@/lib/storage';
 import { EMPTY_FORM, type Boat, type FormState, type RaceLog } from '@/lib/types';
 
-type PendingConfirm = 'saveWithoutResult' | 'clearAll' | null;
+type PendingConfirm = 'clearAll' | 'deleteRace' | null;
 
 export default function Page() {
   // 起動時は買い目。現地で最初に見るのはここで、記録は結果が出てから触る
@@ -351,14 +351,32 @@ export default function Page() {
     [foldIntoLogs, form, logs, persist],
   );
 
-  const handleSave = useCallback(() => {
-    // 未入力でも保存できてよい。ただし結果1着が空のときだけ確認する。
-    if (form.resultFirst === null) {
-      setPendingConfirm('saveWithoutResult');
-      return;
-    }
-    commit();
-  }, [form.resultFirst, commit]);
+  /**
+   * いま見ているレースの記録を消す。
+   *
+   * **1レースだけ消す手段が無かった。** 書出タブの「全記録を消す」しかなく、
+   * 1レース間違えたら丸一日ぶんを捨てるしかなかった。
+   * 金額の記録なので、間違いを直せることのほうが大事。
+   */
+  const deleteRace = useCallback(() => {
+    persist(logs.filter((log) => log.raceNo !== form.raceNo));
+    dispatch({ type: 'selectRace', raceNo: form.raceNo, log: null });
+    clearDraft(raceDate);
+    setToast(`${form.raceNo}R の記録を消しました`);
+  }, [form.raceNo, logs, persist, raceDate]);
+
+  /** そのレースに保存済みの記録があるか。無ければ削除ボタンを出さない */
+  const savedForRace = useMemo(
+    () => logs.some((log) => log.raceNo === form.raceNo),
+    [logs, form.raceNo],
+  );
+
+  /**
+   * 保存。**確認は挟まない。**
+   * 以前は「結果の1着が未入力です」と聞いていたが、着順の手入力を外したので
+   * 毎回必ず出る無意味な確認になっていた。
+   */
+  const handleSave = commit;
 
   const lastLog = useMemo(() => (logs.length > 0 ? logs[logs.length - 1] : null), [logs]);
 
@@ -711,6 +729,8 @@ export default function Page() {
               deadlineLabel={formatMinutesLeft(selectedMinutesLeft)}
               deadlineUrgent={isUrgent(selectedMinutesLeft)}
               onChangeRace={handleChangeRace}
+              hasSavedRecord={savedForRace}
+              onRequestDelete={() => setPendingConfirm('deleteRace')}
               resultRace={
                 activeResults && activeResults.date === activeDate
                   ? (activeResults.races.find((entry) => entry.raceNo === form.raceNo) ?? null)
@@ -807,13 +827,13 @@ export default function Page() {
       <Toast message={toast} onDismiss={() => setToast(null)} />
 
       <ConfirmDialog
-        open={pendingConfirm === 'saveWithoutResult'}
-        title="結果の1着が未入力です"
-        body="このまま記録しますか？（あとから修正できます）"
-        confirmLabel="このまま記録する"
+        open={pendingConfirm === 'deleteRace'}
+        title={`${form.raceNo}R の記録を消しますか？`}
+        body="買った舟券とメモが消えます。他のレースの記録は残ります。"
+        confirmLabel="消す"
         onConfirm={() => {
           setPendingConfirm(null);
-          commit();
+          deleteRace();
         }}
         onCancel={() => setPendingConfirm(null)}
       />

@@ -36,6 +36,10 @@ interface RecordTabProps {
    * dispatch で raceNo だけを変えてはいけない（前のレースの「見」が波及する）。
    */
   onChangeRace: (raceNo: number) => void;
+  /** このレースに保存済みの記録があるか。無ければ削除を出さない */
+  hasSavedRecord: boolean;
+  /** このレースの記録を消す（確認は呼び出し側が出す） */
+  onRequestDelete: () => void;
   /** そのレースの公式結果。払戻が確定していれば金額まで出せる */
   resultRace: ResultRace | null;
   onSave: () => void;
@@ -71,6 +75,8 @@ export function RecordTab({
   deadlineLabel,
   deadlineUrgent,
   onChangeRace,
+  hasSavedRecord,
+  onRequestDelete,
   resultRace,
   onSave,
   onEditLast,
@@ -261,6 +267,21 @@ export function RecordTab({
       ) : null}
 
       {/* ⑦ 保存ボタン */}
+      {/*
+        **1レースだけ消せるようにする。** 以前は書出タブの「全記録を消す」しかなく、
+        1レース間違えたら丸一日ぶんを捨てるしかなかった。金額の記録なので、
+        間違いを直せることのほうが大事。誤操作しないよう小さく、確認を挟む。
+      */}
+      {hasSavedRecord ? (
+        <button
+          type="button"
+          onClick={onRequestDelete}
+          className="min-h-11 w-full text-xs text-text-mute underline"
+        >
+          {form.raceNo}R の記録を消す
+        </button>
+      ) : null}
+
       <div className="fixed inset-x-0 bottom-14 z-10 border-t border-line bg-bg-deep/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto max-w-lg">
           <button
